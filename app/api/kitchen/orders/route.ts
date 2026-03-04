@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { prisma } from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
 
 // GET /api/kitchen/orders?restaurantId=xxx — live order queue
@@ -6,19 +6,26 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const restaurantId = searchParams.get('restaurantId')
 
-    const supabase = await createClient()
+    if (!restaurantId) {
+        return NextResponse.json({ success: false, message: 'restaurantId required' }, { status: 400 })
+    }
 
-    const { data: orders, error } = await supabase
-        .from('orders')
-        .select('*, tables(table_number)')
-        .eq('restaurant_id', restaurantId!)
-        .in('status', ['placed', 'accepted', 'preparing'])
-        .order('priority', { ascending: false })
-        .order('created_at', { ascending: true })
-
-    if (error) return NextResponse.json({ success: false, message: error.message }, { status: 500 })
-
-    return NextResponse.json({ success: true, data: orders })
+    try {
+        const orders = await prisma.order.findMany({
+            where: {
+                restaurantId,
+                status: { in: ['placed', 'accepted', 'preparing'] }
+            },
+            include: { table: { select: { tableNumber: true } } },
+            orderBy: [
+                { priority: 'desc' },
+                { createdAt: 'asc' }
+            ]
+        })
+        return NextResponse.json({ success: true, data: orders })
+    } catch (error: any) {
+        return NextResponse.json({ success: false, message: error.message }, { status: 500 })
+    }
 }
 
 // PATCH /api/kitchen/orders — update order status
@@ -26,19 +33,16 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json()
     const { orderId, status, estimated_time_minutes } = body
 
-    const supabase = await createClient()
+    try {
+        const updateData: any = { status }
+        if (estimated_time_minutes !== undefined) updateData.estimatedTimeMinutes = Number(estimated_time_minutes)
 
-    const updatePayload: Record<string, unknown> = { status }
-    if (estimated_time_minutes !== undefined) updatePayload.estimated_time_minutes = estimated_time_minutes
-
-    const { data, error } = await supabase
-        .from('orders')
-        .update(updatePayload)
-        .eq('id', orderId)
-        .select()
-        .single()
-
-    if (error) return NextResponse.json({ success: false, message: error.message }, { status: 500 })
-
-    return NextResponse.json({ success: true, data })
+        const order = await prisma.order.update({
+            where: { id: orderId },
+            data: updateData
+        })
+        return NextResponse.json({ success: true, data: order })
+    } catch (error: any) {
+        return NextResponse.json({ success: false, message: error.message }, { status: 500 })
+    }
 }

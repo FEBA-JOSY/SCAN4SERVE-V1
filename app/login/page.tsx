@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { UtensilsCrossed, Eye, EyeOff, Loader2 } from 'lucide-react'
@@ -17,7 +17,6 @@ const ROLE_REDIRECT: Record<string, string> = {
 
 export default function LoginPage() {
     const router = useRouter()
-    const supabase = createClient()
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [showPassword, setShowPassword] = useState(false)
@@ -28,21 +27,28 @@ export default function LoginPage() {
         setLoading(true)
 
         try {
-            const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-            if (error) throw error
+            const result = await signIn('credentials', {
+                email,
+                password,
+                redirect: false,
+            })
 
-            // Fetch role from users table
-            const { data: userData, error: userError } = await supabase
-                .from('users')
-                .select('role, is_active')
-                .eq('id', data.user.id)
-                .single()
+            if (result?.error) {
+                throw new Error(result.error)
+            }
 
-            if (userError || !userData) throw new Error('User profile not found')
-            if (!userData.is_active) throw new Error('Your account has been disabled. Contact your admin.')
+            // Fetch user data to get the role for redirection
+            const response = await fetch('/api/auth/me')
+            const resultData = await response.json()
+
+            if (!resultData.success) {
+                throw new Error(resultData.message || 'Failed to fetch user data')
+            }
+
+            const userData = resultData.data
 
             toast.success(`Welcome back! Redirecting to your dashboard...`)
-            router.push(ROLE_REDIRECT[userData.role] ?? '/login')
+            router.push(ROLE_REDIRECT[userData.role] ?? '/')
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Login failed'
             toast.error(msg)

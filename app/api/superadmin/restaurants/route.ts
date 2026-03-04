@@ -1,98 +1,108 @@
-import { createAdminClient } from '@/lib/supabase/admin'
-import { createClient } from '@/lib/supabase/server'
+import { prisma } from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
+import bcrypt from 'bcryptjs'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '../../auth/[...nextauth]/route'
 
-// GET /api/superadmin/restaurants — all restaurants with stats
+// GET /api/superadmin/restaurants — all restaurants
 export async function GET() {
-    const supabase = await createClient()
+    try {
+        const restaurants = await prisma.restaurant.findMany({
+            include: {
+                users: {
+                    where: { role: 'admin' },
+                    take: 1
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        })
 
-    const { data, error } = await supabase
-        .from('restaurants')
-        .select('*')
-        .order('created_at', { ascending: false })
+        // Format to include admin naturally for the frontend
+        const formatted = restaurants.map(r => ({
+            ...r,
+            admin: r.users[0] || null
+        }))
 
-    if (error) return NextResponse.json({ success: false, message: error.message }, { status: 500 })
-
-    return NextResponse.json({ success: true, data })
+        return NextResponse.json({ success: true, data: formatted })
+    } catch (error: any) {
+        return NextResponse.json({ success: false, message: error.message }, { status: 500 })
+    }
 }
 
 // POST /api/superadmin/restaurants — create a new restaurant
 export async function POST(req: NextRequest) {
     const body = await req.json()
-    const { name, email, phone, address, plan, adminEmail, adminPassword, adminName } = body
+    const { name, subdomain, email, phone, address, plan, adminEmail, adminPassword, adminName } = body
 
-    const admin = createAdminClient()
+    try {
+        const hashedPassword = await bcrypt.hash(adminPassword, 10)
 
-    // Create restaurant
-    const { data: restaurant, error: restError } = await admin
-        .from('restaurants')
-        .insert({ name, email, phone, address, plan, subscription_status: 'active', is_active: true })
-        .select()
-        .single()
+        const result = await prisma.$transaction(async (tx) => {
+            // 1. Create restaurant
+            const restaurant = await tx.restaurant.create({
+                data: {
+                    name,
+                    subdomain,
+                    email,
+                    phone,
+                    address,
+                    plan,
+                    subscriptionStatus: 'active',
+                    isActive: true,
+                }
+            })
 
-    if (restError) return NextResponse.json({ success: false, message: restError.message }, { status: 500 })
+            // 2. Create admin user
+            const adminUser = await tx.user.create({
+                data: {
+                    email: adminEmail,
+                    password: hashedPassword,
+                    name: adminName,
+                    role: 'admin',
+                    restaurantId: restaurant.id,
+                    isActive: true,
+                }
+            })
 
-    // Create admin auth user
-    const { data: authData, error: authError } = await admin.auth.admin.createUser({
-        email: adminEmail,
-        password: adminPassword,
-        email_confirm: true,
-    })
+            return restaurant
+        })
 
-    if (authError || !authData.user) {
-        await admin.from('restaurants').delete().eq('id', restaurant.id)
-        return NextResponse.json({ success: false, message: authError?.message ?? 'Admin creation failed' }, { status: 500 })
+        return NextResponse.json({ success: true, data: result }, { status: 201 })
+    } catch (error: any) {
+        return NextResponse.json({ success: false, message: error.message }, { status: 500 })
     }
-
-    // Insert admin user record
-    const { error: userError } = await admin.from('users').insert({
-        id: authData.user.id,
-        email: adminEmail,
-        name: adminName,
-        role: 'admin',
-        restaurant_id: restaurant.id,
-        is_active: true,
-    })
-
-    if (userError) {
-        await admin.auth.admin.deleteUser(authData.user.id)
-        await admin.from('restaurants').delete().eq('id', restaurant.id)
-        return NextResponse.json({ success: false, message: userError.message }, { status: 500 })
-    }
-
-    return NextResponse.json({ success: true, data: restaurant }, { status: 201 })
 }
 
 // PATCH /api/superadmin/restaurants — toggle active/subscription status
 export async function PATCH(req: NextRequest) {
     const body = await req.json()
-    const { id, is_active, subscription_status, subscription_expires_at, plan } = body
+    const { id, isActive, subscriptionStatus, subscriptionExpiresAt, plan, subdomain } = body
+    const session = await getServerSession(authOptions)
 
-    const admin = createAdminClient()
+    try {
+        const updates: any = {}
+        if (isActive !== undefined) updates.isActive = isActive
+        if (subscriptionStatus) updates.subscriptionStatus = subscriptionStatus
+        if (subscriptionExpiresAt) updates.subscriptionExpiresAt = new Date(subscriptionExpiresAt)
+        if (plan) updates.plan = plan
+        if (subdomain) updates.subdomain = subdomain
 
-    const updates: Record<string, unknown> = {}
-    if (is_active !== undefined) updates.is_active = is_active
-    if (subscription_status) updates.subscription_status = subscription_status
-    if (subscription_expires_at) updates.subscription_expires_at = subscription_expires_at
-    if (plan) updates.plan = plan
+        const restaurant = await prisma.restaurant.update({
+            where: { id },
+            data: updates
+        })
 
-    const { data, error } = await admin
-        .from('restaurants')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single()
+        // Log audit
+        await prisma.auditLog.create({
+            data: {
+                userId: session?.user?.id,
+                action: `restaurant_updated:${id}`,
+                details: updates,
+            }
+        })
 
-    if (error) return NextResponse.json({ success: false, message: error.message }, { status: 500 })
-
-    // Log audit
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    await admin.from('audit_logs').insert({
-        user_id: user?.id,
-        action: `restaurant_updated:${id}`,
-        details: updates,
-    })
-
-    return NextResponse.json({ success: true, data })
+        return NextResponse.json({ success: true, data: restaurant })
+    } catch (error: any) {
+        return NextResponse.json({ success: false, message: error.message }, { status: 500 })
+    }
 }

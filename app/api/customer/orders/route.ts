@@ -1,5 +1,6 @@
-import { createClient } from '@/lib/supabase/server'
+import { prisma } from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
+import { Decimal } from '@prisma/client/runtime/library'
 
 // POST /api/customer/orders — place a new order
 export async function POST(req: NextRequest) {
@@ -10,43 +11,39 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: false, message: 'Missing required fields' }, { status: 400 })
     }
 
-    const supabase = await createClient()
-
-    // Verify restaurant subscription
-    const { data: restaurant } = await supabase
-        .from('restaurants')
-        .select('subscription_status, is_active')
-        .eq('id', restaurant_id)
-        .single()
-
-    if (!restaurant?.is_active || restaurant.subscription_status === 'expired') {
-        return NextResponse.json({ success: false, message: 'Restaurant cannot accept orders' }, { status: 403 })
-    }
-
-    // Calculate total
-    const total_amount = (items as { price: number; quantity: number }[])
-        .reduce((sum, item) => sum + item.price * item.quantity, 0)
-
-    const { data: order, error } = await supabase
-        .from('orders')
-        .insert({
-            restaurant_id,
-            table_id,
-            items,
-            total_amount,
-            special_instructions,
-            status: 'placed',
-            payment_status: 'pending',
-            priority: 0,
+    try {
+        // Verify restaurant subscription
+        const restaurant = await prisma.restaurant.findUnique({
+            where: { id: restaurant_id },
+            select: { subscriptionStatus: true, isActive: true }
         })
-        .select('*, tables(table_number)')
-        .single()
 
-    if (error) {
+        if (!restaurant?.isActive || restaurant.subscriptionStatus === 'expired') {
+            return NextResponse.json({ success: false, message: 'Restaurant cannot accept orders' }, { status: 403 })
+        }
+
+        // Calculate total
+        const total_amount = (items as { price: number; quantity: number }[])
+            .reduce((sum, item) => sum + item.price * item.quantity, 0)
+
+        const order = await prisma.order.create({
+            data: {
+                restaurantId: restaurant_id,
+                tableId: table_id,
+                items,
+                totalAmount: new Decimal(total_amount),
+                specialInstructions: special_instructions || null,
+                status: 'placed',
+                paymentStatus: 'pending',
+                priority: 0,
+            },
+            include: { table: { select: { tableNumber: true } } }
+        })
+
+        return NextResponse.json({ success: true, data: order }, { status: 201 })
+    } catch (error: any) {
         return NextResponse.json({ success: false, message: error.message }, { status: 500 })
     }
-
-    return NextResponse.json({ success: true, data: order }, { status: 201 })
 }
 
 // GET /api/customer/orders?orderId=xxx — track order status
@@ -58,16 +55,27 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ success: false, message: 'orderId required' }, { status: 400 })
     }
 
-    const supabase = await createClient()
-    const { data: order } = await supabase
-        .from('orders')
-        .select('id, status, payment_status, items, total_amount, estimated_time_minutes, created_at, updated_at')
-        .eq('id', orderId)
-        .single()
+    try {
+        const order = await prisma.order.findUnique({
+            where: { id: orderId },
+            select: {
+                id: true,
+                status: true,
+                paymentStatus: true,
+                items: true,
+                totalAmount: true,
+                estimatedTimeMinutes: true,
+                createdAt: true,
+                updatedAt: true
+            }
+        })
 
-    if (!order) {
-        return NextResponse.json({ success: false, message: 'Order not found' }, { status: 404 })
+        if (!order) {
+            return NextResponse.json({ success: false, message: 'Order not found' }, { status: 404 })
+        }
+
+        return NextResponse.json({ success: true, data: order })
+    } catch (error: any) {
+        return NextResponse.json({ success: false, message: error.message }, { status: 500 })
     }
-
-    return NextResponse.json({ success: true, data: order })
 }

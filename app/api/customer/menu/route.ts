@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { prisma } from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
 
 // GET /api/customer/menu?restaurantId=xxx
@@ -10,30 +10,36 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ success: false, message: 'restaurantId required' }, { status: 400 })
     }
 
-    const supabase = await createClient()
+    try {
+        // Verify restaurant is active
+        const restaurant = await prisma.restaurant.findUnique({
+            where: { id: restaurantId, isActive: true },
+            select: {
+                id: true,
+                name: true,
+                logoUrl: true,
+                subscriptionStatus: true,
+                isActive: true
+            }
+        })
 
-    // Verify restaurant is active
-    const { data: restaurant } = await supabase
-        .from('restaurants')
-        .select('id, name, logo_url, subscription_status, is_active')
-        .eq('id', restaurantId)
-        .eq('is_active', true)
-        .single()
+        if (!restaurant) {
+            return NextResponse.json({ success: false, message: 'Restaurant not found or inactive' }, { status: 404 })
+        }
 
-    if (!restaurant) {
-        return NextResponse.json({ success: false, message: 'Restaurant not found or inactive' }, { status: 404 })
+        if (restaurant.subscriptionStatus === 'expired') {
+            return NextResponse.json({ success: false, message: 'Restaurant subscription expired' }, { status: 403 })
+        }
+
+        // Get categories + items
+        const categories = await prisma.category.findMany({
+            where: { restaurantId },
+            include: { menuItems: true },
+            orderBy: { displayOrder: 'asc' }
+        })
+
+        return NextResponse.json({ success: true, data: { restaurant, categories } })
+    } catch (error: any) {
+        return NextResponse.json({ success: false, message: error.message }, { status: 500 })
     }
-
-    if (restaurant.subscription_status === 'expired') {
-        return NextResponse.json({ success: false, message: 'Restaurant subscription expired' }, { status: 403 })
-    }
-
-    // Get categories + items
-    const { data: categories } = await supabase
-        .from('categories')
-        .select('*, menu_items(*)')
-        .eq('restaurant_id', restaurantId)
-        .order('display_order', { ascending: true })
-
-    return NextResponse.json({ success: true, data: { restaurant, categories } })
 }

@@ -11,15 +11,16 @@ export type SubscriptionPlan = 'basic' | 'pro' | 'enterprise'
 export interface Restaurant {
     id: string
     name: string
-    email: string
-    phone: string
-    address: string
-    logo_url?: string
-    subscription_status: SubscriptionStatus
-    plan: SubscriptionPlan
-    subscription_expires_at?: string
-    is_active: boolean
-    created_at: string
+    subdomain: string
+    email?: string
+    phone?: string
+    address?: string
+    logoUrl?: string
+    subscriptionStatus: string
+    plan: string
+    subscriptionExpiresAt?: string
+    isActive: boolean
+    createdAt: string
 }
 
 export interface User {
@@ -27,73 +28,96 @@ export interface User {
     name: string
     email: string
     role: UserRole
-    restaurant_id?: string
-    is_active: boolean
-    created_by?: string
-    created_at: string
+    restaurantId?: string | null
+    isActive: boolean
+    createdBy?: string
+    createdAt: string
 }
 
 export interface Table {
     id: string
-    restaurant_id: string
-    table_number: number
-    qr_code_url: string
+    restaurantId: string
+    tableNumber: number
+    qrCodeUrl?: string
     active: boolean
-    created_at: string
+    createdAt: string
 }
 
 export interface Category {
     id: string
-    restaurant_id: string
+    restaurantId: string
     name: string
-    display_order: number
-    created_at: string
+    displayOrder: number
+    createdAt: string
 }
 
 export interface MenuItem {
     id: string
-    restaurant_id: string
-    category_id: string
+    restaurantId: string
+    categoryId: string
     name: string
     description?: string
     price: number
-    image_url?: string
+    imageUrl?: string
     available: boolean
-    prep_time_minutes?: number
-    is_veg: boolean
-    created_at: string
+    prepTimeMinutes?: number
+    isVeg: boolean
+    createdAt: string
     category?: Category
 }
 
 export interface OrderItem {
-    menu_item_id: string
+    menuItemId: string
     name: string
     price: number
     quantity: number
-    special_instructions?: string
+    specialInstructions?: string
 }
 
 export interface Order {
     id: string
-    restaurant_id: string
-    table_id: string
+    restaurantId: string
+    tableId: string
     items: OrderItem[]
-    total_amount: number
+    totalAmount: number
     status: OrderStatus
-    payment_status: PaymentStatus
-    special_instructions?: string
+    paymentStatus: PaymentStatus
+    specialInstructions?: string
     priority: number
-    estimated_time_minutes?: number
-    created_at: string
-    updated_at: string
+    estimatedTimeMinutes?: number
+    createdAt: string
+    updatedAt: string
     table?: Table
 }
 
 export interface AuditLog {
     id: string
-    user_id: string
+    userId: string
     action: string
-    details?: Record<string, unknown>
+    details?: any
     timestamp: string
     user?: User
+}
+
+// NextAuth Extensions
+import "next-auth"
+
+declare module "next-auth" {
+    interface User {
+        id: string
+        role: UserRole
+        restaurantId?: string | null
+    }
+
+    interface Session {
+        user: User
+    }
+}
+
+declare module "next-auth/jwt" {
+    interface JWT {
+        id: string
+        role: UserRole
+        restaurantId?: string | null
+    }
 }

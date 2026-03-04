@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { useParams } from 'next/navigation'
 import { toast } from 'sonner'
 import {
@@ -16,10 +15,9 @@ export default function CustomerMenuPage() {
     const params = useParams()
     const restaurantId = params.restaurantId as string
     const tableId = params.tableId as string
-    const supabase = createClient()
 
     const [restaurant, setRestaurant] = useState<Restaurant | null>(null)
-    const [categories, setCategories] = useState<(Category & { menu_items: MenuItem[] })[]>([])
+    const [categories, setCategories] = useState<(Category & { menuItems: MenuItem[] })[]>([])
     const [loading, setLoading] = useState(true)
     const [cart, setCart] = useState<Record<string, { item: MenuItem; quantity: number; notes: string }>>({})
     const [showCart, setShowCart] = useState(false)
@@ -30,21 +28,6 @@ export default function CustomerMenuPage() {
 
     useEffect(() => {
         fetchMenu()
-
-        // Subscribe to menu updates
-        const channel = supabase
-            .channel('menu-updates')
-            .on('postgres_changes', {
-                event: '*',
-                schema: 'public',
-                table: 'menu_items',
-                filter: `restaurant_id=eq.${restaurantId}`
-            }, () => fetchMenu())
-            .subscribe()
-
-        return () => {
-            supabase.removeChannel(channel)
-        }
     }, [restaurantId])
 
     async function fetchMenu() {
@@ -163,8 +146,8 @@ export default function CustomerMenuPage() {
                 <div className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 brand-gradient rounded-xl flex items-center justify-center glow-orange-sm">
-                            {restaurant?.logo_url ? (
-                                <img src={restaurant.logo_url} alt={restaurant.name} className="w-full h-full object-cover rounded-xl" />
+                            {restaurant?.logoUrl ? (
+                                <img src={restaurant.logoUrl} alt={restaurant.name} className="w-full h-full object-cover rounded-xl" />
                             ) : (
                                 <Utensils className="w-6 h-6 text-white" />
                             )}
@@ -218,7 +201,7 @@ export default function CustomerMenuPage() {
             {/* Menu Content */}
             <main className="p-4 space-y-8">
                 {categories.map(category => {
-                    const filteredItems = category.menu_items?.filter(item =>
+                    const filteredItems = category.menuItems?.filter(item =>
                         item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                         item.description?.toLowerCase().includes(searchQuery.toLowerCase())
                     )
@@ -235,8 +218,8 @@ export default function CustomerMenuPage() {
                                 {filteredItems.map(item => (
                                     <div key={item.id} className="glass-card p-3 flex gap-4 fade-in group">
                                         <div className="w-24 h-24 bg-gray-900 rounded-xl overflow-hidden flex-shrink-0 relative">
-                                            {item.image_url ? (
-                                                <img src={item.image_url} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                                            {item.imageUrl ? (
+                                                <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                                             ) : (
                                                 <div className="w-full h-full flex items-center justify-center bg-gray-900 text-gray-800">
                                                     <Utensils className="w-8 h-8" />
@@ -255,11 +238,11 @@ export default function CustomerMenuPage() {
                                                     <h3 className="font-semibold text-white group-hover:text-orange-400 transition-colors">{item.name}</h3>
                                                     <span className={cn(
                                                         "w-3 h-3 border-2 rounded-sm flex-shrink-0 mt-1",
-                                                        item.is_veg ? "border-green-600 bg-green-600/10" : "border-red-600 bg-red-600/10"
+                                                        item.isVeg ? "border-green-600 bg-green-600/10" : "border-red-600 bg-red-600/10"
                                                     )}>
                                                         <span className={cn(
                                                             "w-1.5 h-1.5 rounded-full m-auto",
-                                                            item.is_veg ? "bg-green-600" : "bg-red-600"
+                                                            item.isVeg ? "bg-green-600" : "bg-red-600"
                                                         )} />
                                                     </span>
                                                 </div>
@@ -355,8 +338,8 @@ export default function CustomerMenuPage() {
                             {cartItems.map(({ item, quantity, notes }) => (
                                 <div key={item.id} className="flex gap-4">
                                     <div className="w-16 h-16 bg-gray-800 rounded-xl overflow-hidden flex-shrink-0">
-                                        {item.image_url ? (
-                                            <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                                        {item.imageUrl ? (
+                                            <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
                                         ) : (
                                             <div className="w-full h-full flex items-center justify-center text-gray-700">
                                                 <Utensils className="w-6 h-6" />
@@ -430,28 +413,29 @@ export default function CustomerMenuPage() {
 
 function OrderTrackingView({ order, onBackToMenu }: { order: any; onBackToMenu: () => void }) {
     const [status, setStatus] = useState(order.status)
-    const [estimatedTime, setEstimatedTime] = useState(order.estimated_time_minutes)
-    const supabase = createClient()
+    const [estimatedTime, setEstimatedTime] = useState(order.estimatedTimeMinutes)
 
     useEffect(() => {
-        // Subscribe to status changes
-        const channel = supabase
-            .channel(`order-${order.id}`)
-            .on('postgres_changes', {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'orders',
-                filter: `id=eq.${order.id}`
-            }, (payload: any) => {
-                setStatus(payload.new.status)
-                setEstimatedTime(payload.new.estimated_time_minutes)
-                if (payload.new.status === 'ready') toast.success('Your order is ready! 🍲')
-                if (payload.new.status === 'served') toast.success('Order served. Enjoy your meal! ✨')
-            })
-            .subscribe()
+        // Polling for status changes
+        const interval = setInterval(async () => {
+            try {
+                const res = await fetch(`/api/customer/orders?orderId=${order.id}`)
+                const json = await res.json()
+                if (json.success) {
+                    if (json.data.status !== status) {
+                        setStatus(json.data.status)
+                        if (json.data.status === 'ready') toast.success('Your order is ready! 🍲')
+                        if (json.data.status === 'served') toast.success('Order served. Enjoy your meal! ✨')
+                    }
+                    setEstimatedTime(json.data.estimatedTimeMinutes)
+                }
+            } catch (error) {
+                console.error('Error polling order status:', error)
+            }
+        }, 10000)
 
-        return () => { supabase.removeChannel(channel) }
-    }, [order.id])
+        return () => clearInterval(interval)
+    }, [order.id, status])
 
     const steps = [
         { key: 'placed', label: 'Order Placed', time: 'Just now' },

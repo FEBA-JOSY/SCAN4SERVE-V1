@@ -1,19 +1,28 @@
-import { createClient } from '@/lib/supabase/server'
+import { getServerSession } from "next-auth/next"
+import { authOptions } from "../[...nextauth]/route" // I should export authOptions to make this easier
+import { prisma } from "@/lib/prisma"
 import { NextResponse } from 'next/server'
 
 export async function GET() {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const session = await getServerSession(authOptions)
 
-    if (!user) {
+    if (!session || !session.user || !session.user.id) {
         return NextResponse.json({ success: false, message: 'Not authenticated' }, { status: 401 })
     }
 
-    const { data: userData } = await supabase
-        .from('users')
-        .select('*, restaurants(id, name, subscription_status, is_active)')
-        .eq('id', user.id)
-        .single()
+    const userData = await prisma.user.findUnique({
+        where: { id: session.user.id! },
+        include: {
+            restaurant: {
+                select: {
+                    id: true,
+                    name: true,
+                    subscriptionStatus: true,
+                    isActive: true
+                }
+            }
+        }
+    })
 
     return NextResponse.json({ success: true, data: userData })
 }

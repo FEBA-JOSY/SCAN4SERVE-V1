@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/sidebar'
 import { toast } from 'sonner'
@@ -14,30 +13,22 @@ import { cn, formatCurrency, formatTime } from '@/lib/utils'
 import type { User, Restaurant, Table, Order } from '@/types'
 
 export default function WaiterDashboard() {
-    const [profile, setProfile] = useState<(User & { restaurants: Restaurant }) | null>(null)
+    const [profile, setProfile] = useState<any>(null)
     const [tables, setTables] = useState<(Table & { hasActiveOrder: boolean; hasReadyOrder: boolean; activeOrders: any[] })[]>([])
     const [loading, setLoading] = useState(true)
     const [selectedTable, setSelectedTable] = useState<any>(null)
-    const supabase = createClient()
     const router = useRouter()
 
     useEffect(() => {
         fetchProfile()
 
-        // Real-time updates for table status
-        const channel = supabase
-            .channel('waiter-updates')
-            .on('postgres_changes', {
-                event: '*',
-                schema: 'public',
-                table: 'orders'
-            }, () => fetchTables())
-            .subscribe()
+        // Real-time updates disabled, using polling
+        const interval = setInterval(() => {
+            if (profile?.restaurantId) fetchTables(profile.restaurantId)
+        }, 30000)
 
-        return () => {
-            supabase.removeChannel(channel)
-        }
-    }, [profile?.restaurant_id])
+        return () => clearInterval(interval)
+    }, [profile?.restaurantId])
 
     async function fetchProfile() {
         try {
@@ -45,7 +36,7 @@ export default function WaiterDashboard() {
             const json = await res.json()
             if (json.success) {
                 setProfile(json.data)
-                fetchTables(json.data.restaurant_id)
+                fetchTables(json.data.restaurantId)
             } else {
                 router.push('/login')
             }
@@ -55,7 +46,7 @@ export default function WaiterDashboard() {
     }
 
     async function fetchTables(restaurantId?: string) {
-        const rId = restaurantId || profile?.restaurant_id
+        const rId = restaurantId || profile?.restaurantId
         if (!rId) return
 
         try {
@@ -98,7 +89,7 @@ export default function WaiterDashboard() {
             <Sidebar
                 role={profile?.role || 'waiter'}
                 userName={profile?.name || 'Waiter'}
-                restaurantName={profile?.restaurants?.name}
+                restaurantName={profile?.restaurant?.name}
             />
 
             <main className="flex-1 flex flex-col min-w-0">
@@ -160,7 +151,7 @@ export default function WaiterDashboard() {
                                         <Table2 className="w-6 h-6" />
                                     </div>
 
-                                    <span className="text-2xl font-black text-white">#{table.table_number}</span>
+                                    <span className="text-2xl font-black text-white">#{table.tableNumber}</span>
                                     <span className={cn(
                                         "text-[8px] font-black uppercase tracking-widest mt-1",
                                         table.hasActiveOrder ? "text-blue-400" : "text-gray-600"
@@ -189,7 +180,7 @@ export default function WaiterDashboard() {
                     <div className="relative w-full max-w-md h-full bg-gray-900 border-l border-gray-800 shadow-2xl flex flex-col slide-in">
                         <div className="p-6 border-b border-gray-800 flex items-center justify-between">
                             <div>
-                                <h3 className="text-xl font-bold text-white tracking-tight">Table #{selectedTable.table_number}</h3>
+                                <h3 className="text-xl font-bold text-white tracking-tight">Table #{selectedTable.tableNumber}</h3>
                                 <p className="text-xs text-gray-500 mt-0.5">Manage orders and payments</p>
                             </div>
                             <button onClick={() => setSelectedTable(null)} className="p-2 bg-gray-800 rounded-full text-gray-400">

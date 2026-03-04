@@ -1,7 +1,7 @@
 'use client'
 
 import { usePathname, useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { signOut } from 'next-auth/react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import {
@@ -57,12 +57,11 @@ interface SidebarProps {
 export function Sidebar({ role, userName, restaurantName }: SidebarProps) {
     const pathname = usePathname()
     const router = useRouter()
-    const supabase = createClient()
 
     const navItems = ROLE_NAV[role] ?? []
 
     async function handleLogout() {
-        await supabase.auth.signOut()
+        await signOut({ redirect: false })
         toast.success('Signed out successfully')
         router.push('/login')
     }

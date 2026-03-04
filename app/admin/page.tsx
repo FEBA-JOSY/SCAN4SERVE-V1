@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/sidebar'
 import { toast } from 'sonner'
@@ -9,17 +8,16 @@ import {
     Building2, Users, CreditCard, Settings,
     BarChart3, Plus, ShieldCheck, Mail,
     Phone, Globe, MapPin, Camera, Save,
-    Loader2, BadgeCheck, AlertTriangle
+    Loader2, BadgeCheck, AlertTriangle, Download
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { User, Restaurant } from '@/types'
 
 export default function AdminDashboard() {
-    const [profile, setProfile] = useState<(User & { restaurants: Restaurant }) | null>(null)
+    const [profile, setProfile] = useState<any>(null)
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
-    const [restaurantForm, setRestaurantForm] = useState<Partial<Restaurant>>({})
-    const supabase = createClient()
+    const [restaurantForm, setRestaurantForm] = useState<any>({})
     const router = useRouter()
 
     useEffect(() => {
@@ -32,7 +30,7 @@ export default function AdminDashboard() {
             const json = await res.json()
             if (json.success) {
                 setProfile(json.data)
-                setRestaurantForm(json.data.restaurants)
+                setRestaurantForm(json.data.restaurant || {})
             } else {
                 router.push('/login')
             }
@@ -45,20 +43,33 @@ export default function AdminDashboard() {
 
     async function handleUpdateRestaurant(e: React.FormEvent) {
         e.preventDefault()
-        setSaving(true)
-        // Update logic via Supabase or API
-        const { error } = await supabase
-            .from('restaurants')
-            .update(restaurantForm)
-            .eq('id', profile?.restaurant_id!)
+        if (!profile?.restaurantId) return;
 
-        if (error) {
-            toast.error('Update failed')
-        } else {
-            toast.success('Restaurant profile updated! ✨')
-            fetchProfile()
+        setSaving(true)
+
+        try {
+            const response = await fetch('/api/restaurant', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: profile.restaurantId,
+                    ...restaurantForm
+                })
+            })
+
+            const result = await response.json()
+
+            if (result.success) {
+                toast.success('Restaurant profile updated! ✨')
+                fetchProfile()
+            } else {
+                throw new Error(result.message || 'Update failed')
+            }
+        } catch (err: any) {
+            toast.error(err.message || 'Update failed')
+        } finally {
+            setSaving(false)
         }
-        setSaving(false)
     }
 
     return (

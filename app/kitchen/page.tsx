@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/sidebar'
 import { toast } from 'sonner'
@@ -14,13 +13,12 @@ import { cn, formatCurrency, formatTime, minutesAgo } from '@/lib/utils'
 import type { Order, User, Restaurant } from '@/types'
 
 export default function KitchenDashboard() {
-    const [profile, setProfile] = useState<(User & { restaurants: Restaurant }) | null>(null)
+    const [profile, setProfile] = useState<any>(null)
     const [orders, setOrders] = useState<Order[]>([])
     const [loading, setLoading] = useState(true)
     const [soundEnabled, setSoundEnabled] = useState(true)
     const [searchQuery, setSearchQuery] = useState('')
     const audioRef = useRef<HTMLAudioElement | null>(null)
-    const supabase = createClient()
     const router = useRouter()
 
     useEffect(() => {
@@ -29,28 +27,14 @@ export default function KitchenDashboard() {
         // Initialize notification sound
         audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3')
 
-        const channel = supabase
-            .channel('kitchen-orders')
-            .on('postgres_changes', {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'orders'
-            }, (payload) => {
-                if (payload.new.restaurant_id === profile?.restaurant_id) {
-                    handleNewOrder(payload.new as Order)
-                }
-            })
-            .on('postgres_changes', {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'orders'
-            }, () => fetchOrders())
-            .subscribe()
+        // Realtime disabled after migration from Supabase
+        // Will be replaced with polling or Pusher/Ably if needed
+        const interval = setInterval(() => {
+            if (profile?.restaurantId) fetchOrders(profile.restaurantId)
+        }, 30000) // Poll every 30s as a fallback
 
-        return () => {
-            supabase.removeChannel(channel)
-        }
-    }, [profile?.restaurant_id])
+        return () => clearInterval(interval)
+    }, [profile?.restaurantId])
 
     async function fetchProfile() {
         try {
@@ -58,7 +42,7 @@ export default function KitchenDashboard() {
             const json = await res.json()
             if (json.success) {
                 setProfile(json.data)
-                fetchOrders(json.data.restaurant_id)
+                fetchOrders(json.data.restaurantId)
             } else {
                 router.push('/login')
             }
@@ -68,7 +52,7 @@ export default function KitchenDashboard() {
     }
 
     async function fetchOrders(restaurantId?: string) {
-        const rId = restaurantId || profile?.restaurant_id
+        const rId = restaurantId || profile?.restaurantId
         if (!rId) return
 
         try {
@@ -125,7 +109,7 @@ export default function KitchenDashboard() {
             <Sidebar
                 role={profile?.role || 'kitchen'}
                 userName={profile?.name || 'Chef'}
-                restaurantName={profile?.restaurants?.name}
+                restaurantName={profile?.restaurant?.name}
             />
 
             <main className="flex-1 flex flex-col min-w-0">

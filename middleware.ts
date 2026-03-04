@@ -1,6 +1,6 @@
-import { createServerClient } from '@supabase/ssr'
-import { NextResponse, type NextRequest } from 'next/server'
-import type { UserRole } from '@/types'
+import { withAuth } from "next-auth/middleware"
+import { NextResponse } from "next/server"
+import type { UserRole } from "@/types"
 
 const ROLE_ROUTES: Record<string, UserRole[]> = {
     '/superadmin': ['superadmin'],
@@ -10,67 +10,43 @@ const ROLE_ROUTES: Record<string, UserRole[]> = {
     '/waiter': ['waiter', 'manager', 'admin', 'superadmin'],
 }
 
-export async function middleware(request: NextRequest) {
-    let supabaseResponse = NextResponse.next({ request })
+export default withAuth(
+    function middleware(req) {
+        const token = req.nextauth.token
+        const pathname = req.nextUrl.pathname
 
-    const supabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-            cookies: {
-                getAll() {
-                    return request.cookies.getAll()
-                },
-                setAll(cookiesToSet) {
-                    cookiesToSet.forEach(({ name, value, options }) =>
-                        request.cookies.set(name, value)
-                    )
-                    supabaseResponse = NextResponse.next({ request })
-                    cookiesToSet.forEach(({ name, value, options }) =>
-                        supabaseResponse.cookies.set(name, value, options)
-                    )
-                },
+        // Already checked authentication via withAuth wrapper
+        // Now check role-based access
+        const routeEntry = Object.entries(ROLE_ROUTES).find(([route]) =>
+            pathname.startsWith(route)
+        )
+
+        if (routeEntry) {
+            const [, allowedRoles] = routeEntry
+            const userRole = token?.role as UserRole
+
+            if (!userRole || !allowedRoles.includes(userRole)) {
+                return NextResponse.redirect(new URL('/login?error=unauthorized', req.url))
+            }
+        }
+
+        return NextResponse.next()
+    },
+    {
+        callbacks: {
+            authorized: ({ token, req }) => {
+                const pathname = req.nextUrl.pathname
+
+                // Public routes
+                if (pathname.startsWith('/menu') || pathname === '/login' || pathname.startsWith('/api/auth')) {
+                    return true
+                }
+
+                return !!token
             },
-        }
-    )
-
-    const { data: { user } } = await supabase.auth.getUser()
-    const pathname = request.nextUrl.pathname
-
-    // Public routes — always accessible
-    if (pathname.startsWith('/menu') || pathname === '/login') {
-        return supabaseResponse
+        },
     }
-
-    // Not logged in → redirect to login
-    if (!user) {
-        return NextResponse.redirect(new URL('/login', request.url))
-    }
-
-    // Check role access
-    const { data: dbUser } = await supabase
-        .from('users')
-        .select('role, is_active')
-        .eq('id', user.id)
-        .single()
-
-    if (!dbUser || !dbUser.is_active) {
-        return NextResponse.redirect(new URL('/login?error=account_disabled', request.url))
-    }
-
-    const routeEntry = Object.entries(ROLE_ROUTES).find(([route]) =>
-        pathname.startsWith(route)
-    )
-
-    if (routeEntry) {
-        const [, allowedRoles] = routeEntry
-        if (!allowedRoles.includes(dbUser.role as UserRole)) {
-            return NextResponse.redirect(new URL('/login?error=unauthorized', request.url))
-        }
-    }
-
-    return supabaseResponse
-}
+)
 
 export const config = {
     matcher: [

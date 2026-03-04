@@ -1,5 +1,6 @@
-import { createAdminClient } from '@/lib/supabase/admin'
+import { prisma } from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
+import bcrypt from 'bcryptjs'
 
 // POST /api/auth/register — create staff user (admin/manager/kitchen/waiter)
 export async function POST(req: NextRequest) {
@@ -10,39 +11,23 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: false, message: 'Missing required fields' }, { status: 400 })
     }
 
-    const admin = createAdminClient()
+    const hashedPassword = await bcrypt.hash(password, 10)
 
-    // Create auth user
-    const { data: authData, error: authError } = await admin.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-    })
-
-    if (authError || !authData.user) {
-        return NextResponse.json({ success: false, message: authError?.message ?? 'Auth user creation failed' }, { status: 400 })
-    }
-
-    // Insert into users table
-    const { data: user, error: dbError } = await admin
-        .from('users')
-        .insert({
-            id: authData.user.id,
-            email,
-            name,
-            role,
-            restaurant_id: restaurant_id ?? null,
-            created_by: created_by ?? null,
-            is_active: true,
+    try {
+        const user = await prisma.user.create({
+            data: {
+                email,
+                password: hashedPassword,
+                name,
+                role,
+                restaurantId: restaurant_id || null,
+                createdBy: created_by || null,
+                isActive: true,
+            }
         })
-        .select()
-        .single()
 
-    if (dbError) {
-        // Rollback auth user on DB failure
-        await admin.auth.admin.deleteUser(authData.user.id)
-        return NextResponse.json({ success: false, message: dbError.message }, { status: 500 })
+        return NextResponse.json({ success: true, data: user }, { status: 201 })
+    } catch (error: any) {
+        return NextResponse.json({ success: false, message: error.message }, { status: 500 })
     }
-
-    return NextResponse.json({ success: true, data: user }, { status: 201 })
 }

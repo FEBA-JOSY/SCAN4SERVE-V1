@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/sidebar'
 import { toast } from 'sonner'
@@ -18,10 +17,9 @@ import type { User, Restaurant, MenuItem, Category, Table } from '@/types'
 type ManagerTab = 'overview' | 'menu' | 'tables' | 'staff'
 
 export default function ManagerDashboard() {
-    const [profile, setProfile] = useState<(User & { restaurants: Restaurant }) | null>(null)
+    const [profile, setProfile] = useState<any>(null)
     const [activeTab, setActiveTab] = useState<ManagerTab>('overview')
     const [loading, setLoading] = useState(true)
-    const supabase = createClient()
     const router = useRouter()
 
     useEffect(() => {
@@ -56,7 +54,7 @@ export default function ManagerDashboard() {
             <Sidebar
                 role={profile?.role || 'manager'}
                 userName={profile?.name || 'Manager'}
-                restaurantName={profile?.restaurants?.name}
+                restaurantName={profile?.restaurant?.name}
             />
 
             <main className="flex-1 flex flex-col min-w-0">
@@ -88,10 +86,10 @@ export default function ManagerDashboard() {
                         </div>
                     ) : (
                         <>
-                            {activeTab === 'overview' && <OverviewTab restaurantId={profile?.restaurant_id} />}
-                            {activeTab === 'menu' && <MenuTab restaurantId={profile?.restaurant_id} />}
-                            {activeTab === 'tables' && <TablesTab restaurantId={profile?.restaurant_id} />}
-                            {activeTab === 'staff' && <StaffTab restaurantId={profile?.restaurant_id} profile={profile} />}
+                            {activeTab === 'overview' && <OverviewTab restaurantId={profile?.restaurantId} />}
+                            {activeTab === 'menu' && <MenuTab restaurantId={profile?.restaurantId} />}
+                            {activeTab === 'tables' && <TablesTab restaurantId={profile?.restaurantId} />}
+                            {activeTab === 'staff' && <StaffTab restaurantId={profile?.restaurantId} profile={profile} />}
                         </>
                     )}
                 </div>
@@ -229,9 +227,9 @@ function MenuTab({ restaurantId }: { restaurantId?: string }) {
     }
 
     async function fetchCategories() {
-        const supabase = createClient()
-        const { data } = await supabase.from('categories').select('*').eq('restaurant_id', restaurantId!)
-        if (data) setCategories(data)
+        const res = await fetch(`/api/manager/categories?restaurantId=${restaurantId}`)
+        const json = await res.json()
+        if (json.success) setCategories(json.data)
     }
 
     async function handleDelete(id: string) {
@@ -269,8 +267,8 @@ function MenuTab({ restaurantId }: { restaurantId?: string }) {
                 {items.map(item => (
                     <div key={item.id} className="glass-card group overflow-hidden border-gray-800/40">
                         <div className="h-40 bg-gray-900 relative overflow-hidden">
-                            {item.image_url ? (
-                                <img src={item.image_url} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt="" />
+                            {item.imageUrl ? (
+                                <img src={item.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt="" />
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center text-gray-800">
                                     <ImageIcon className="w-12 h-12" />
@@ -279,9 +277,9 @@ function MenuTab({ restaurantId }: { restaurantId?: string }) {
                             <div className="absolute top-3 left-3 flex gap-2">
                                 <span className={cn(
                                     "px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest",
-                                    item.is_veg ? "bg-green-600 text-white" : "bg-red-600 text-white"
+                                    item.isVeg ? "bg-green-600 text-white" : "bg-red-600 text-white"
                                 )}>
-                                    {item.is_veg ? 'Veg' : 'Non-Veg'}
+                                    {item.isVeg ? 'Veg' : 'Non-Veg'}
                                 </span>
                                 <span className="bg-black/60 backdrop-blur px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest text-white">
                                     {(item as any).categories?.name}
@@ -342,10 +340,10 @@ function MenuModal({ restaurantId, categories, item, onClose }: { restaurantId: 
         name: item?.name || '',
         price: item?.price || '',
         description: item?.description || '',
-        category_id: item?.category_id || (categories[0]?.id || ''),
-        is_veg: item?.is_veg ?? true,
-        image_url: item?.image_url || '',
-        prep_time_minutes: item?.prep_time_minutes || 15
+        categoryId: item?.categoryId || (categories[0]?.id || ''),
+        isVeg: item?.isVeg ?? true,
+        imageUrl: item?.imageUrl || '',
+        prepTimeMinutes: item?.prepTimeMinutes || 15
     })
 
     async function handleSubmit(e: React.FormEvent) {
@@ -355,7 +353,7 @@ function MenuModal({ restaurantId, categories, item, onClose }: { restaurantId: 
         const res = await fetch('/api/manager/menu', {
             method,
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...form, restaurant_id: restaurantId, id: item?.id })
+            body: JSON.stringify({ ...form, restaurantId: restaurantId, id: item?.id })
         })
         if (res.ok) {
             toast.success(item ? 'Dish updated!' : 'New dish added!')
@@ -400,19 +398,19 @@ function MenuModal({ restaurantId, categories, item, onClose }: { restaurantId: 
                             <div className="flex gap-2">
                                 <button
                                     type="button"
-                                    onClick={() => setForm({ ...form, is_veg: true })}
-                                    className={cn("flex-1 py-3 rounded-xl border text-[10px] font-black uppercase transition-all", form.is_veg ? "bg-green-600/10 border-green-600 text-green-500" : "bg-gray-800 border-gray-800 text-gray-600")}
+                                    onClick={() => setForm({ ...form, isVeg: true })}
+                                    className={cn("flex-1 py-3 rounded-xl border text-[10px] font-black uppercase transition-all", form.isVeg ? "bg-green-600/10 border-green-600 text-green-500" : "bg-gray-800 border-gray-800 text-gray-600")}
                                 >Veg</button>
                                 <button
                                     type="button"
-                                    onClick={() => setForm({ ...form, is_veg: false })}
-                                    className={cn("flex-1 py-3 rounded-xl border text-[10px] font-black uppercase transition-all", !form.is_veg ? "bg-red-600/10 border-red-600 text-red-500" : "bg-gray-800 border-gray-800 text-gray-600")}
+                                    onClick={() => setForm({ ...form, isVeg: false })}
+                                    className={cn("flex-1 py-3 rounded-xl border text-[10px] font-black uppercase transition-all", !form.isVeg ? "bg-red-600/10 border-red-600 text-red-500" : "bg-gray-800 border-gray-800 text-gray-600")}
                                 >Non-Veg</button>
                             </div>
                         </div>
                         <div>
                             <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 block">Prep Time (mins)</label>
-                            <input type="number" value={form.prep_time_minutes} onChange={e => setForm({ ...form, prep_time_minutes: parseInt(e.target.value) })} className="w-full bg-gray-950/50 border border-gray-800 rounded-xl px-4 py-3 text-white text-sm focus:border-orange-500/50" />
+                            <input type="number" value={form.prepTimeMinutes} onChange={e => setForm({ ...form, prepTimeMinutes: parseInt(e.target.value) })} className="w-full bg-gray-950/50 border border-gray-800 rounded-xl px-4 py-3 text-white text-sm focus:border-orange-500/50" />
                         </div>
                     </div>
 
@@ -441,11 +439,11 @@ function TablesTab({ restaurantId }: { restaurantId?: string }) {
     }
 
     async function addTable() {
-        const lastNum = tables.length > 0 ? tables[tables.length - 1].table_number : 0
+        const lastNum = tables.length > 0 ? tables[tables.length - 1].tableNumber : 0
         const res = await fetch('/api/manager/tables', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ restaurant_id: restaurantId, table_number: lastNum + 1 })
+            body: JSON.stringify({ restaurantId: restaurantId, tableNumber: lastNum + 1 })
         })
         if (res.ok) {
             toast.success('New table ready for guests!')
@@ -489,7 +487,7 @@ function TablesTab({ restaurantId }: { restaurantId?: string }) {
                                 <Download className="w-6 h-6" />
                             </div>
                         </div>
-                        <span className="text-xl font-black text-white">#{table.table_number}</span>
+                        <span className="text-xl font-black text-white">#{table.tableNumber}</span>
                         <button className="text-[8px] font-black text-orange-500 uppercase tracking-widest mt-1 hover:underline">Download QR</button>
                     </div>
                 ))}
@@ -507,9 +505,9 @@ function StaffTab({ restaurantId, profile }: { restaurantId?: string; profile: a
     }, [restaurantId])
 
     async function fetchStaff() {
-        const supabase = createClient()
-        const { data } = await supabase.from('users').select('*').eq('restaurant_id', restaurantId!)
-        if (data) setStaff(data)
+        const res = await fetch(`/api/manager/staff?restaurantId=${restaurantId}`)
+        const json = await res.json()
+        if (json.success) setStaff(json.data)
         setLoading(false)
     }
 

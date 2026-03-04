@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { prisma } from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
 
 // GET /api/manager/menu?restaurantId=xxx
@@ -6,17 +6,20 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const restaurantId = searchParams.get('restaurantId')
 
-    const supabase = await createClient()
+    if (!restaurantId) {
+        return NextResponse.json({ success: false, message: 'Missing restaurantId' }, { status: 400 })
+    }
 
-    const { data, error } = await supabase
-        .from('menu_items')
-        .select('*, categories(name)')
-        .eq('restaurant_id', restaurantId!)
-        .order('created_at', { ascending: false })
-
-    if (error) return NextResponse.json({ success: false, message: error.message }, { status: 500 })
-
-    return NextResponse.json({ success: true, data })
+    try {
+        const menuItems = await prisma.menuItem.findMany({
+            where: { restaurantId },
+            include: { category: { select: { name: true } } },
+            orderBy: { createdAt: 'desc' }
+        })
+        return NextResponse.json({ success: true, data: menuItems })
+    } catch (error: any) {
+        return NextResponse.json({ success: false, message: error.message }, { status: 500 })
+    }
 }
 
 // POST /api/manager/menu — create menu item
@@ -24,17 +27,24 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { restaurant_id, category_id, name, description, price, image_url, is_veg, prep_time_minutes } = body
 
-    const supabase = await createClient()
-
-    const { data, error } = await supabase
-        .from('menu_items')
-        .insert({ restaurant_id, category_id, name, description, price, image_url, is_veg, prep_time_minutes, available: true })
-        .select()
-        .single()
-
-    if (error) return NextResponse.json({ success: false, message: error.message }, { status: 500 })
-
-    return NextResponse.json({ success: true, data }, { status: 201 })
+    try {
+        const menuItem = await prisma.menuItem.create({
+            data: {
+                restaurantId: restaurant_id,
+                categoryId: category_id,
+                name,
+                description,
+                price: Number(price),
+                imageUrl: image_url,
+                isVeg: is_veg,
+                prepTimeMinutes: prep_time_minutes,
+                available: true
+            }
+        })
+        return NextResponse.json({ success: true, data: menuItem }, { status: 201 })
+    } catch (error: any) {
+        return NextResponse.json({ success: false, message: error.message }, { status: 500 })
+    }
 }
 
 // PATCH /api/manager/menu — update menu item
@@ -42,18 +52,26 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json()
     const { id, ...updates } = body
 
-    const supabase = await createClient()
+    try {
+        // Map snake_case to camelCase for Prisma if necessary, 
+        // but here we use updates directly. We should be careful with types.
+        const formattedUpdates: any = {}
+        if (updates.name) formattedUpdates.name = updates.name
+        if (updates.description) formattedUpdates.description = updates.description
+        if (updates.price) formattedUpdates.price = Number(updates.price)
+        if (updates.image_url) formattedUpdates.imageUrl = updates.image_url
+        if (updates.is_veg !== undefined) formattedUpdates.isVeg = updates.is_veg
+        if (updates.prep_time_minutes !== undefined) formattedUpdates.prepTimeMinutes = updates.prep_time_minutes
+        if (updates.available !== undefined) formattedUpdates.available = updates.available
 
-    const { data, error } = await supabase
-        .from('menu_items')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single()
-
-    if (error) return NextResponse.json({ success: false, message: error.message }, { status: 500 })
-
-    return NextResponse.json({ success: true, data })
+        const menuItem = await prisma.menuItem.update({
+            where: { id },
+            data: formattedUpdates
+        })
+        return NextResponse.json({ success: true, data: menuItem })
+    } catch (error: any) {
+        return NextResponse.json({ success: false, message: error.message }, { status: 500 })
+    }
 }
 
 // DELETE /api/manager/menu?id=xxx
@@ -61,11 +79,16 @@ export async function DELETE(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
 
-    const supabase = await createClient()
+    if (!id) {
+        return NextResponse.json({ success: false, message: 'Missing id' }, { status: 400 })
+    }
 
-    const { error } = await supabase.from('menu_items').delete().eq('id', id!)
-
-    if (error) return NextResponse.json({ success: false, message: error.message }, { status: 500 })
-
-    return NextResponse.json({ success: true, message: 'Item deleted' })
+    try {
+        await prisma.menuItem.delete({
+            where: { id }
+        })
+        return NextResponse.json({ success: true, message: 'Item deleted' })
+    } catch (error: any) {
+        return NextResponse.json({ success: false, message: error.message }, { status: 500 })
+    }
 }
