@@ -10,7 +10,6 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: false, message: 'Missing required fields' }, { status: 400 })
     }
 
-    try {
         // Verify restaurant subscription
         const restaurant = await prisma.restaurant.findUnique({
             where: { id: restaurant_id },
