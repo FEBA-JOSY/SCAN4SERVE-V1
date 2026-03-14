@@ -38,7 +38,7 @@ export async function GET(request: Request) {
         const qrBaseUrl = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/menu/${restaurantId}`;
         
         let csvContent = "Table Number,QR Code URL\n";
-        tables.forEach((table) => {
+        tables.forEach((table: { id: string; tableNumber: number }) => {
             const qrUrl = `${qrBaseUrl}/${table.id}`;
             csvContent += `Table ${table.tableNumber},"${qrUrl}"\n`;
         });
