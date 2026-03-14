@@ -35,7 +35,12 @@ export async function GET(req: NextRequest) {
         })
 
         // Format notifications
-        const notifications = orders.map(order => ({
+        const notifications = orders.map((order: {
+            id: string;
+            status: string;
+            createdAt: string | number | Date;
+            table?: { tableNumber?: number } | null;
+        }) => ({
             id: order.id,
             title: order.status === 'placed' ? 'New Order Received' : 'Order Being Prepared',
             message: `Table #${order.table?.tableNumber} has ${order.status === 'placed' ? 'placed a new order' : 'an order in preparation'}`,
