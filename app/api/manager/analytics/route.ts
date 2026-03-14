@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
 
         // Revenue should include the 10% (5% GST + 5% Service Charge) added in the bill modal
         const revenueToday = revenueGeneratingOrders
-            .reduce((sum: number, o) => sum + Number(o.totalAmount || 0) * 1.10, 0)
+            .reduce((sum: number, o: { totalAmount: number }) => sum + Number(o.totalAmount || 0) * 1.10, 0)
 
         // Best selling items (base calculation on quantity and price)
         const itemCountMap: Record<string, { name: string; count: number; revenue: number }> = {}
