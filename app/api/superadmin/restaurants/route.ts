@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
 
         const result = await prisma.$transaction(async (tx) => {
             // 1. Create restaurant
-            const restaurant = await tx.restaurant.create({
+            const result = await prisma.$transaction(async (tx: typeof prisma) => {
                 data: {
                     name,
                     subdomain,
