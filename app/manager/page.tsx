@@ -12,7 +12,7 @@ import {
     DollarSign, QrCode, X,
     Loader2, ImageIcon, Share2, Clock,
     CheckCircle2, AlertCircle, FileText,
-    Calendar, Filter
+    Filter
 } from 'lucide-react'
 import { cn, formatCurrency } from '@/lib/utils'
 import type { User, MenuItem, Category, Table } from '@/types'
@@ -25,19 +25,6 @@ export default function ManagerDashboard({ initialTab = 'overview' }: { initialT
     const [loading, setLoading] = useState(true)
     const router = useRouter()
     const pathname = usePathname()
-
-    useEffect(() => {
-        // if we landed on a deep route like /manager/menu set tab accordingly
-        if (pathname && pathname.endsWith('/menu')) setActiveTab('menu')
-        if (pathname && pathname.endsWith('/tables')) setActiveTab('tables')
-        if (pathname && pathname.endsWith('/staff')) setActiveTab('staff')
-        if (pathname && pathname.endsWith('/orders')) setActiveTab('orders')
-        if (pathname && pathname.endsWith('/reports')) setActiveTab('reports')
-    }, [pathname])
-
-    useEffect(() => {
-        fetchProfile()
-    }, [])
 
     const fetchProfile = useCallback(async () => {
         try {
@@ -54,6 +41,19 @@ export default function ManagerDashboard({ initialTab = 'overview' }: { initialT
             setLoading(false)
         }
     }, [router])
+
+    useEffect(() => {
+        // if we landed on a deep route like /manager/menu set tab accordingly
+        if (pathname && pathname.endsWith('/menu')) setActiveTab('menu')
+        if (pathname && pathname.endsWith('/tables')) setActiveTab('tables')
+        if (pathname && pathname.endsWith('/staff')) setActiveTab('staff')
+        if (pathname && pathname.endsWith('/orders')) setActiveTab('orders')
+        if (pathname && pathname.endsWith('/reports')) setActiveTab('reports')
+    }, [pathname])
+
+    useEffect(() => {
+        fetchProfile()
+    }, [fetchProfile])
 
     const tabs = [
         { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -267,8 +267,8 @@ function MenuTab({ restaurantId }: { restaurantId?: string }) {
 
     useEffect(() => {
         if (restaurantId) {
-            fetchMenu()
-            fetchCategories()
+            Promise.resolve().then(() => fetchMenu())
+            Promise.resolve().then(() => fetchCategories())
         }
     }, [restaurantId, fetchMenu, fetchCategories])
 
@@ -479,7 +479,19 @@ function MenuModal({ restaurantId, categories, item, onClose }: { restaurantId: 
 }
 
 function ReportsTab({ restaurantId }: { restaurantId?: string }) {
-    const [reportData, setReportData] = useState<any>(null)
+    interface TopItem {
+        name: string;
+        count: number;
+        revenue: number;
+    }
+    interface ReportData {
+        totalOrders: number;
+        totalRevenue: number;
+        avgOrderValue: number;
+        totalItemsSold: number;
+        topItems: TopItem[];
+    }
+    const [reportData, setReportData] = useState<ReportData | null>(null)
     const [loading, setLoading] = useState(true)
     const [dateRange, setDateRange] = useState({
         startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days ago
@@ -521,9 +533,9 @@ function ReportsTab({ restaurantId }: { restaurantId?: string }) {
             ['Total Items Sold', reportData.totalItemsSold],
             [],
             ['Top Items', 'Quantity', 'Revenue'],
-            ...reportData.topItems.map((item: any) => [item.name, item.count, formatCurrency(item.revenue)])
+            ...reportData.topItems.map((item: TopItem) => [item.name, item.count, formatCurrency(item.revenue)])
         ]
-            .map(row => row.map(cell => `"${cell}"`).join(','))
+            .map((row: (string | number)[]) => row.map((cell: string | number) => `"${cell}"`).join(','))
             .join('\n')
 
         const blob = new Blob([csv], { type: 'text/csv' })
@@ -769,7 +781,7 @@ function OrdersTab({ restaurantId }: { restaurantId?: string }) {
                                             {order.status}
                                         </span>
                                         <span className="text-[10px] text-gray-500">
-                                            {new Date(order.createdAt).toLocaleTimeString()}
+                                            {new Date(order.createdAt).toLocaleDateString()} {new Date(order.createdAt).toLocaleTimeString()}
                                         </span>
                                     </div>
                                     <div className="ml-0">
@@ -853,7 +865,9 @@ function TablesTab({ restaurantId }: { restaurantId?: string }) {
     }
 
     useEffect(() => {
-        if (restaurantId) fetchTables()
+        if (restaurantId) {
+            Promise.resolve().then(() => fetchTables())
+        }
     }, [restaurantId, fetchTables])
 
     return (
@@ -892,6 +906,22 @@ function TablesTab({ restaurantId }: { restaurantId?: string }) {
 
 function StaffTab({ restaurantId, profile }: { restaurantId?: string; profile: User }) {
     const [staff, setStaff] = useState<User[]>([])
+    const [showRegister, setShowRegister] = useState(false)
+    const [registerForm, setRegisterForm] = useState({
+        name: '',
+        email: '',
+        role: 'waiter',
+        password: ''
+    })
+    const [registerLoading, setRegisterLoading] = useState(false)
+    const [editStaff, setEditStaff] = useState<User | null>(null)
+    const [editForm, setEditForm] = useState({
+        name: '',
+        email: '',
+        role: 'waiter',
+        password: ''
+    })
+    const [editLoading, setEditLoading] = useState(false)
 
     const fetchStaff = useCallback(async () => {
         if (!restaurantId) return
@@ -901,8 +931,72 @@ function StaffTab({ restaurantId, profile }: { restaurantId?: string; profile: U
     }, [restaurantId])
 
     useEffect(() => {
-        if (restaurantId) fetchStaff()
+        if (restaurantId) {
+            Promise.resolve().then(() => fetchStaff())
+        }
     }, [restaurantId, fetchStaff])
+
+    async function handleRegister(e: React.FormEvent) {
+        e.preventDefault()
+        setRegisterLoading(true)
+        const res = await fetch('/api/manager/staff', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                ...registerForm,
+                restaurantId
+            })
+        })
+        const json = await res.json()
+        setRegisterLoading(false)
+        if (json.success) {
+            toast.success('Staff registered!')
+            setShowRegister(false)
+            setRegisterForm({ name: '', email: '', role: 'waiter', password: '' })
+            fetchStaff()
+        } else {
+            toast.error(json.message || 'Registration failed')
+        }
+    }
+
+    async function handleEdit(e: React.FormEvent) {
+        e.preventDefault()
+        if (!editStaff) return
+        setEditLoading(true)
+        const res = await fetch('/api/manager/staff', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                id: editStaff.id,
+                name: editForm.name,
+                email: editForm.email,
+                role: editForm.role,
+                password: editForm.password || undefined
+            })
+        })
+        const json = await res.json()
+        setEditLoading(false)
+        if (json.success) {
+            toast.success('Staff updated!')
+            setEditStaff(null)
+            setEditForm({ name: '', email: '', role: 'waiter', password: '' })
+            fetchStaff()
+        } else {
+            toast.error(json.message || 'Update failed')
+        }
+    }
+
+    async function handleDelete(id: string) {
+        if (!confirm('Are you sure you want to delete this staff member?')) return
+        const res = await fetch(`/api/manager/staff?id=${id}`, { method: 'DELETE' })
+        const json = await res.json()
+        if (json.success) {
+            toast.success('Staff deleted!')
+            fetchStaff()
+        } else {
+            toast.error(json.message || 'Delete failed')
+        }
+    }
 
     return (
         <div className="space-y-6 fade-in">
@@ -911,10 +1005,50 @@ function StaffTab({ restaurantId, profile }: { restaurantId?: string; profile: U
                     <h3 className="font-bold text-white text-lg">Resource Staff</h3>
                     <p className="text-gray-500 text-xs">Manage kitchen and service personnel</p>
                 </div>
-                <button className="flex items-center gap-2 brand-gradient px-4 py-2 rounded-xl text-xs font-black text-white glow-orange-sm">
+                <button
+                    className="flex items-center gap-2 brand-gradient px-4 py-2 rounded-xl text-xs font-black text-white glow-orange-sm"
+                    onClick={() => setShowRegister(true)}
+                >
                     <Plus className="w-4 h-4" /> Register Staff
                 </button>
             </div>
+
+            {showRegister && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowRegister(false)} />
+                    <div className="relative w-full max-w-md glass-card p-8 bg-gray-900 border-orange-500/20 shadow-2xl slide-in">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-lg font-bold text-white">Register Staff</h3>
+                            <button onClick={() => setShowRegister(false)} className="p-2 hover:bg-gray-800 rounded-full text-gray-400"><X className="w-5 h-5" /></button>
+                        </div>
+                        <form onSubmit={handleRegister} className="space-y-4">
+                            <div>
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 block">Name</label>
+                                <input required value={registerForm.name} onChange={e => setRegisterForm(f => ({ ...f, name: e.target.value }))} className="w-full bg-gray-950/50 border border-gray-800 rounded-xl px-4 py-3 text-white text-sm focus:border-orange-500/50" />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 block">Email</label>
+                                <input required type="email" value={registerForm.email} onChange={e => setRegisterForm(f => ({ ...f, email: e.target.value }))} className="w-full bg-gray-950/50 border border-gray-800 rounded-xl px-4 py-3 text-white text-sm focus:border-orange-500/50" />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 block">Role</label>
+                                <select value={registerForm.role} onChange={e => setRegisterForm(f => ({ ...f, role: e.target.value }))} className="w-full bg-gray-950/50 border border-gray-800 rounded-xl px-4 py-3 text-white text-sm focus:border-orange-500/50">
+                                    <option value="waiter">Waiter</option>
+                                    <option value="kitchen">Kitchen</option>
+                                    <option value="manager">Manager</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 block">Password</label>
+                                <input required type="password" value={registerForm.password} onChange={e => setRegisterForm(f => ({ ...f, password: e.target.value }))} className="w-full bg-gray-950/50 border border-gray-800 rounded-xl px-4 py-3 text-white text-sm focus:border-orange-500/50" />
+                            </div>
+                            <button disabled={registerLoading} className="w-full brand-gradient py-3 rounded-xl text-white font-black uppercase tracking-widest text-sm shadow-xl shadow-orange-500/20 active:scale-95 transition-all">
+                                {registerLoading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Register'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {staff.map(member => (
@@ -928,14 +1062,69 @@ function StaffTab({ restaurantId, profile }: { restaurantId?: string; profile: U
                             <p className="text-[10px] text-gray-600 truncate">{member.email}</p>
                         </div>
                         <div className="flex gap-1">
-                            <button className="p-2 text-gray-500 hover:text-white"><Edit2 className="w-3.5 h-3.5" /></button>
+                            <button
+                                className="p-2 text-gray-500 hover:text-white"
+                                onClick={() => {
+                                    setEditStaff(member)
+                                    setEditForm({
+                                        name: member.name,
+                                        email: member.email,
+                                        role: member.role,
+                                        password: ''
+                                    })
+                                }}
+                            >
+                                <Edit2 className="w-3.5 h-3.5" />
+                            </button>
                             {member.id !== profile?.id && (
-                                <button className="p-2 text-gray-500 hover:text-red-500"><X className="w-3.5 h-3.5" /></button>
+                                <button
+                                    className="p-2 text-gray-500 hover:text-red-500"
+                                    onClick={() => handleDelete(member.id)}
+                                >
+                                    <X className="w-3.5 h-3.5" />
+                                </button>
                             )}
                         </div>
                     </div>
                 ))}
             </div>
+
+            {editStaff && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setEditStaff(null)} />
+                    <div className="relative w-full max-w-md glass-card p-8 bg-gray-900 border-orange-500/20 shadow-2xl slide-in">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-lg font-bold text-white">Edit Staff</h3>
+                            <button onClick={() => setEditStaff(null)} className="p-2 hover:bg-gray-800 rounded-full text-gray-400"><X className="w-5 h-5" /></button>
+                        </div>
+                        <form onSubmit={handleEdit} className="space-y-4">
+                            <div>
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 block">Name</label>
+                                <input required value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} className="w-full bg-gray-950/50 border border-gray-800 rounded-xl px-4 py-3 text-white text-sm focus:border-orange-500/50" />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 block">Email</label>
+                                <input required type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} className="w-full bg-gray-950/50 border border-gray-800 rounded-xl px-4 py-3 text-white text-sm focus:border-orange-500/50" />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 block">Role</label>
+                                <select value={editForm.role} onChange={e => setEditForm(f => ({ ...f, role: e.target.value }))} className="w-full bg-gray-950/50 border border-gray-800 rounded-xl px-4 py-3 text-white text-sm focus:border-orange-500/50">
+                                    <option value="waiter">Waiter</option>
+                                    <option value="kitchen">Kitchen</option>
+                                    <option value="manager">Manager</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 block">Password (leave blank to keep unchanged)</label>
+                                <input type="password" value={editForm.password} onChange={e => setEditForm(f => ({ ...f, password: e.target.value }))} className="w-full bg-gray-950/50 border border-gray-800 rounded-xl px-4 py-3 text-white text-sm focus:border-orange-500/50" />
+                            </div>
+                            <button disabled={editLoading} className="w-full brand-gradient py-3 rounded-xl text-white font-black uppercase tracking-widest text-sm shadow-xl shadow-orange-500/20 active:scale-95 transition-all">
+                                {editLoading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Update'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

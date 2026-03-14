@@ -34,6 +34,9 @@ model User {
   email        String      @unique
   password     String
   role         String
+  phone        String?
+  dateOfBirth  DateTime?   @map("date_of_birth")
+  dateOfJoin   DateTime?   @map("date_of_join")
   restaurantId String?     @map("restaurant_id")
   isActive     Boolean     @default(true) @map("is_active")
   createdBy    String?     @map("created_by")

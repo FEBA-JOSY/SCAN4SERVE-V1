@@ -15,6 +15,10 @@ import type { Order, User, Restaurant } from '@/types'
 type KitchenTab = 'orders' | 'notifications'
 
 export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab?: KitchenTab } = {}) {
+        // Fetch profile on mount to avoid infinite loading
+        useEffect(() => {
+            fetchProfile();
+        }, []);
     const [profile, setProfile] = useState<any>(null)
     const [orders, setOrders] = useState<Order[]>([])
     const [loading, setLoading] = useState(true)

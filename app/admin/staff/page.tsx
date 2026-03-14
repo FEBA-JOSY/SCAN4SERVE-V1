@@ -26,6 +26,15 @@ export default function AdminStaffPage() {
         password: '',
     })
     const router = useRouter()
+    const [actionMenuOpen, setActionMenuOpen] = useState<string | null>(null)
+    const [editStaff, setEditStaff] = useState<User | null>(null)
+    const [editForm, setEditForm] = useState({
+        name: '',
+        email: '',
+        role: 'waiter',
+        password: ''
+    })
+    const [editLoading, setEditLoading] = useState(false)
 
     useEffect(() => {
         fetchProfile()
@@ -102,6 +111,54 @@ export default function AdminStaffPage() {
             }
         } catch (e) {
             toast.error('Status update failed')
+        }
+    }
+
+    async function handleEditStaff(e: React.FormEvent) {
+        e.preventDefault()
+        if (!editStaff) return
+        setEditLoading(true)
+        try {
+            const res = await fetch('/api/admin/staff', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: editStaff.id,
+                    name: editForm.name,
+                    email: editForm.email,
+                    role: editForm.role,
+                    password: editForm.password || undefined
+                })
+            })
+            const json = await res.json()
+            if (json.success) {
+                toast.success('Staff updated!')
+                setEditStaff(null)
+                setEditForm({ name: '', email: '', role: 'waiter', password: '' })
+                fetchStaff()
+            } else {
+                toast.error(json.message || 'Update failed')
+            }
+        } catch (e) {
+            toast.error('Network error')
+        } finally {
+            setEditLoading(false)
+        }
+    }
+
+    async function handleDeleteStaff(id: string) {
+        if (!confirm('Are you sure you want to delete this staff member?')) return
+        try {
+            const res = await fetch(`/api/admin/staff?id=${id}`, { method: 'DELETE' })
+            const json = await res.json()
+            if (json.success) {
+                toast.success('Staff deleted!')
+                fetchStaff()
+            } else {
+                toast.error(json.message || 'Delete failed')
+            }
+        } catch (e) {
+            toast.error('Network error')
         }
     }
 
@@ -210,7 +267,7 @@ export default function AdminStaffPage() {
                                                             {new Date(member.createdAt).toLocaleDateString()}
                                                         </td>
                                                         <td className="py-4 px-4 text-right">
-                                                            <div className="flex items-center justify-end gap-2">
+                                                            <div className="flex items-center justify-end gap-2 relative">
                                                                 <button
                                                                     onClick={() => toggleStaffStatus(member.id, member.isActive)}
                                                                     className={cn(
@@ -220,10 +277,37 @@ export default function AdminStaffPage() {
                                                                 >
                                                                     {member.isActive ? <XCircle className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
                                                                 </button>
-                                                                <button className="p-2 bg-gray-900 border border-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors">
+                                                                <button
+                                                                    onClick={() => setActionMenuOpen(actionMenuOpen === member.id ? null : member.id)}
+                                                                    className="p-2 bg-gray-900 border border-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors"
+                                                                >
                                                                     <MoreVertical className="w-4 h-4" />
                                                                 </button>
                                                             </div>
+                                                            {actionMenuOpen === member.id && (
+                                                                <div className="absolute right-0 top-10 z-50 bg-gray-900 border border-gray-800 rounded-lg shadow-lg w-32">
+                                                                    <button
+                                                                        className="w-full px-4 py-2 text-left text-xs text-white hover:bg-gray-800"
+                                                                        onClick={() => {
+                                                                            setEditStaff(member)
+                                                                            setEditForm({
+                                                                                name: member.name,
+                                                                                email: member.email,
+                                                                                role: member.role,
+                                                                                password: ''
+                                                                            })
+                                                                            setActionMenuOpen(null)
+                                                                        }}
+                                                                    >Edit</button>
+                                                                    <button
+                                                                        className="w-full px-4 py-2 text-left text-xs text-red-500 hover:bg-gray-800"
+                                                                        onClick={() => {
+                                                                            setActionMenuOpen(null)
+                                                                            handleDeleteStaff(member.id)
+                                                                        }}
+                                                                    >Delete</button>
+                                                                </div>
+                                                            )}
                                                         </td>
                                                     </tr>
                                                 ))
@@ -322,6 +406,82 @@ export default function AdminStaffPage() {
                                 >
                                     {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : <BadgeCheck className="w-4 h-4" />}
                                     ADD STAFF
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Staff Modal */}
+            {editStaff && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                    <div className="glass-card w-full max-w-lg p-8 fade-in shadow-2xl">
+                        <div className="flex items-center justify-between mb-8">
+                            <div>
+                                <h2 className="text-2xl font-black text-white italic">EDIT STAFF MEMBER</h2>
+                                <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mt-1">Update team member details</p>
+                            </div>
+                            <button onClick={() => setEditStaff(null)} className="p-2 hover:bg-gray-800 rounded-lg text-gray-500">
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+                        <form onSubmit={handleEditStaff} className="space-y-6">
+                            <div>
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 block">Full Name</label>
+                                <input
+                                    value={editForm.name}
+                                    onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                                    className="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500/50 outline-none"
+                                    placeholder="John Doe"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 block">Email Address</label>
+                                <input
+                                    value={editForm.email}
+                                    onChange={e => setEditForm({ ...editForm, email: e.target.value })}
+                                    className="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500/50 outline-none"
+                                    placeholder="john@restaurant.com"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 block">Password (leave blank to keep unchanged)</label>
+                                <input
+                                    type="password"
+                                    value={editForm.password}
+                                    onChange={e => setEditForm({ ...editForm, password: e.target.value })}
+                                    className="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500/50 outline-none"
+                                    placeholder="••••••••"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 block">Role</label>
+                                <select
+                                    value={editForm.role}
+                                    onChange={e => setEditForm({ ...editForm, role: e.target.value })}
+                                    className="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500/50 outline-none"
+                                >
+                                    <option value="waiter">Waiter</option>
+                                    <option value="kitchen">Kitchen Staff</option>
+                                    <option value="manager">Manager</option>
+                                    <option value="submanager">Sub Manager</option>
+                                </select>
+                            </div>
+                            <div className="flex items-center justify-end gap-4 pt-6 border-t border-gray-800">
+                                <button
+                                    type="button"
+                                    onClick={() => setEditStaff(null)}
+                                    className="px-6 py-3 rounded-xl text-xs font-black text-gray-500 hover:text-white transition-colors"
+                                >
+                                    CANCEL
+                                </button>
+                                <button
+                                    disabled={editLoading}
+                                    className="brand-gradient px-8 py-3 rounded-xl text-xs font-black text-white glow-orange-sm active:scale-95 transition-all flex items-center gap-2"
+                                >
+                                    {editLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <BadgeCheck className="w-4 h-4" />}
+                                    UPDATE STAFF
                                 </button>
                             </div>
                         </form>

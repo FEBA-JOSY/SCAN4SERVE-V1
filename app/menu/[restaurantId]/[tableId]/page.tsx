@@ -162,7 +162,7 @@ export default function CustomerMenuPage() {
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 brand-gradient rounded-xl flex items-center justify-center glow-orange-sm">
                             {restaurant?.logoUrl ? (
-                                <Image src={restaurant.logoUrl} alt={restaurant.name} className="w-full h-full object-cover rounded-xl" />
+                                <Image src={restaurant.logoUrl} alt={restaurant.name} width={40} height={40} className="w-full h-full object-cover rounded-xl" />
                             ) : (
                                 <Utensils className="w-6 h-6 text-white" />
                             )}
@@ -234,7 +234,7 @@ export default function CustomerMenuPage() {
                                     <div key={item.id} className="glass-card p-3 flex gap-4 fade-in group">
                                         <div className="w-24 h-24 bg-gray-900 rounded-xl overflow-hidden shrink-0 relative">
                                             {item.imageUrl ? (
-                                                <Image src={item.imageUrl} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                                                <Image src={item.imageUrl} alt={item.name} width={96} height={96} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                                             ) : (
                                                 <div className="w-full h-full flex items-center justify-center text-gray-800">
                                                     <Utensils className="w-8 h-8" />
@@ -354,7 +354,7 @@ export default function CustomerMenuPage() {
                                 <div key={item.id} className="flex gap-4">
                                     <div className="w-16 h-16 bg-gray-800 rounded-xl overflow-hidden shrink-0">
                                         {item.imageUrl ? (
-                                            <Image src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                                            <Image src={item.imageUrl} alt={item.name} width={64} height={64} className="w-full h-full object-cover" />
                                         ) : (
                                             <div className="w-full h-full flex items-center justify-center text-gray-700">
                                                 <Utensils className="w-6 h-6" />

@@ -56,19 +56,20 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
 
     async function fetchTables(restaurantId?: string) {
         const rId = restaurantId || profile?.restaurantId
-        if (!rId) return
-
+        if (!rId) return []
         try {
             const res = await fetch(`/api/waiter/tables?restaurantId=${rId}`)
             const json = await res.json()
             if (json.success) {
                 setTables(json.data)
+                return json.data
             }
         } catch (error) {
             toast.error('Failed to load tables')
         } finally {
             setLoading(false)
         }
+        return []
     }
 
     async function updateOrderStatus(orderId: string, action: 'serve' | 'complete') {
@@ -81,10 +82,9 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
             const json = await res.json()
             if (json.success) {
                 toast.success(action === 'serve' ? 'Order Served!' : 'Order Completed & Paid')
-                fetchTables()
-                if (selectedTable) {
-                    // Update local table data if drawer is open
-                    const updatedTable = tables.find(t => t.id === selectedTable.id)
+                const updatedTables = await fetchTables()
+                if (selectedTable && updatedTables) {
+                    const updatedTable = updatedTables.find((t: any) => t.id === selectedTable.id)
                     setSelectedTable(updatedTable)
                 }
             }
@@ -230,8 +230,39 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
                                         <div className="p-4 space-y-3">
                                             <div className="flex justify-between items-center pb-3 border-b border-gray-800/60">
                                                 <span className="text-xs text-gray-400">Bill Amount</span>
-                                                <span className="text-sm font-bold text-white">{formatCurrency(order.total_amount)}</span>
+                                                <span className="text-sm font-bold text-white">{formatCurrency(Number.isFinite(Number(order.totalAmount)) ? Number(order.totalAmount) : 0)}</span>
                                             </div>
+
+                                            {/* Bill Details Section */}
+                                            {order.status === 'served' || order.status === 'ready' ? (
+                                                <div className="my-3 p-3 bg-gray-800/60 rounded-xl border border-gray-800">
+                                                    <h4 className="text-xs font-bold text-white mb-2">Bill Details</h4>
+                                                    <table className="w-full text-xs text-gray-300 mb-2">
+                                                        <thead>
+                                                            <tr>
+                                                                <th className="text-left">Item</th>
+                                                                <th>Qty</th>
+                                                                <th>Price</th>
+                                                                <th>Subtotal</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {order.items?.map((item: any) => (
+                                                                <tr key={item.id}>
+                                                                    <td>{item.name}</td>
+                                                                    <td className="text-center">{item.quantity}</td>
+                                                                    <td className="text-center">{formatCurrency(item.price)}</td>
+                                                                    <td className="text-center">{formatCurrency(item.price * item.quantity)}</td>
+                                                                </tr>
+                                                            ))}
+                                                            <tr>
+                                                                <td colSpan={3} className="text-right font-bold">Total</td>
+                                                                <td className="text-center font-bold">{formatCurrency(Number.isFinite(Number(order.totalAmount)) ? Number(order.totalAmount) : 0)}</td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            ) : null}
 
                                             <div className="grid grid-cols-2 gap-3 mt-4">
                                                 {order.status === 'ready' && (
@@ -248,7 +279,7 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
                                                         onClick={() => updateOrderStatus(order.id, 'complete')}
                                                         className="col-span-2 flex items-center justify-center gap-2 py-3 bg-green-600 rounded-xl text-white font-bold text-xs shadow-lg shadow-green-600/10"
                                                     >
-                                                        <Wallet className="w-4 h-4" /> Generate & Pay Bill
+                                                        <Wallet className="w-4 h-4" /> Mark Bill as Paid
                                                     </button>
                                                 )}
 
@@ -329,7 +360,7 @@ function NotificationsTab({ restaurantId }: { restaurantId?: string }) {
                     {notifications.map((notif, idx) => (
                         <div key={idx} className="glass-card p-4 border border-gray-800/40 hover:border-orange-500/20 transition-all">
                             <div className="flex items-start gap-4">
-                                <div className="w-2 h-2 rounded-full bg-orange-500 mt-2 flex-shrink-0" />
+                                <div className="w-2 h-2 rounded-full bg-orange-500 mt-2 shrink-0" />
                                 <div className="flex-1">
                                     <h4 className="font-bold text-white">{notif.title}</h4>
                                     <p className="text-sm text-gray-400 mt-1">{notif.message}</p>
@@ -338,7 +369,7 @@ function NotificationsTab({ restaurantId }: { restaurantId?: string }) {
                                     </p>
                                 </div>
                                 <span className={cn(
-                                    "text-[10px] font-bold uppercase px-2 py-1 rounded-lg flex-shrink-0",
+                                    "text-[10px] font-bold uppercase px-2 py-1 rounded-lg shrink-0",
                                     notif.type === 'ready' ? 'bg-orange-500/10 text-orange-400' :
                                         notif.type === 'order' ? 'bg-blue-500/10 text-blue-400' :
                                             'bg-gray-500/10 text-gray-400'

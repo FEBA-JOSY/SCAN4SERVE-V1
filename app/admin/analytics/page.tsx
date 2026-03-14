@@ -31,11 +31,18 @@ export default function AdminAnalyticsPage() {
     const [profile, setProfile] = useState<User | null>(null)
     const [stats, setStats] = useState<AnalyticsData | null>(null)
     const [loading, setLoading] = useState(true)
+    const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
     const router = useRouter()
 
     useEffect(() => {
         fetchProfile()
     }, [])
+
+    useEffect(() => {
+        if (profile?.restaurantId) {
+            fetchAnalytics(profile.restaurantId, selectedDate)
+        }
+    }, [selectedDate, profile?.restaurantId])
 
     async function fetchProfile() {
         try {
@@ -44,7 +51,7 @@ export default function AdminAnalyticsPage() {
             if (json.success && json.data.role === 'admin') {
                 setProfile(json.data)
                 if (json.data.restaurantId) {
-                    fetchAnalytics(json.data.restaurantId)
+                    fetchAnalytics(json.data.restaurantId, selectedDate)
                 } else {
                     setLoading(false)
                 }
@@ -57,9 +64,11 @@ export default function AdminAnalyticsPage() {
         }
     }
 
-    const fetchAnalytics = useCallback(async (restaurantId: string) => {
+    const fetchAnalytics = useCallback(async (restaurantId: string, date?: string) => {
         try {
-            const res = await fetch(`/api/manager/analytics?restaurantId=${restaurantId}`)
+            let url = `/api/manager/analytics?restaurantId=${restaurantId}`
+            if (date) url += `&date=${date}`
+            const res = await fetch(url)
             const json = await res.json()
             if (json.success) setStats(json.data)
         } finally {
@@ -87,6 +96,16 @@ export default function AdminAnalyticsPage() {
                     <div className="flex items-center gap-3">
                         <BarChart3 className="w-5 h-5 text-orange-500" />
                         <h2 className="text-xl font-bold text-white tracking-tight">Restaurant Analytics</h2>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <label className="text-xs text-gray-400 font-bold mr-2">Date:</label>
+                        <input
+                            type="date"
+                            value={selectedDate}
+                            onChange={e => setSelectedDate(e.target.value)}
+                            className="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-white text-xs focus:border-orange-500/50"
+                            max={new Date().toISOString().split('T')[0]}
+                        />
                     </div>
                 </header>
 
@@ -122,7 +141,7 @@ export default function AdminAnalyticsPage() {
                                     <div className="flex items-center justify-between mb-8">
                                         <h3 className="font-bold text-white flex items-center gap-2">
                                             <TrendingUp className="w-5 h-5 text-orange-500" />
-                                            Peak Hours Today
+                                            Peak Hours
                                         </h3>
                                         <button className="text-[10px] font-bold text-gray-500 uppercase hover:text-white transition-colors border border-gray-800 px-3 py-1 rounded-lg">Download CSV</button>
                                     </div>

@@ -3,53 +3,54 @@ import { NextRequest, NextResponse } from 'next/server'
 
 // POST /api/customer/orders — place a new order
 export async function POST(req: NextRequest) {
-    const body = await req.json()
-    const { restaurant_id, table_id, items, special_instructions } = body
+    try {
+        const body = await req.json();
+        const { restaurant_id, table_id, items, special_instructions } = body;
 
-    if (!restaurant_id || !table_id || !items?.length) {
-        return NextResponse.json({ success: false, message: 'Missing required fields' }, { status: 400 })
-    }
+        if (!restaurant_id || !table_id || !items?.length) {
+            return NextResponse.json({ success: false, message: 'Missing required fields' }, { status: 400 });
+        }
 
         // Verify restaurant subscription
         const restaurant = await prisma.restaurant.findUnique({
             where: { id: restaurant_id },
             select: { subscriptionStatus: true, isActive: true }
-        })
+        });
 
         if (!restaurant?.isActive || restaurant.subscriptionStatus === 'expired') {
-            return NextResponse.json({ success: false, message: 'Restaurant cannot accept orders' }, { status: 403 })
+            return NextResponse.json({ success: false, message: 'Restaurant cannot accept orders' }, { status: 403 });
         }
 
         // Look up table by restaurant ID and table number (for QR code compatibility)
-        const tableNumber = parseInt(table_id, 10)
-        const table = isNaN(tableNumber) 
+        const tableNumber = parseInt(table_id, 10);
+        const table = isNaN(tableNumber)
             ? await prisma.table.findUnique({
                 where: { id: table_id },
                 select: { id: true, restaurantId: true, active: true }
             })
             : await prisma.table.findFirst({
-                where: { 
+                where: {
                     restaurantId: restaurant_id,
                     tableNumber: tableNumber
                 },
                 select: { id: true, restaurantId: true, active: true }
-            })
+            });
 
         if (!table) {
-            return NextResponse.json({ success: false, message: `Table not found (searched for: ${table_id})` }, { status: 404 })
+            return NextResponse.json({ success: false, message: `Table not found (searched for: ${table_id})` }, { status: 404 });
         }
 
         if (table.restaurantId !== restaurant_id) {
-            return NextResponse.json({ success: false, message: 'Table does not belong to this restaurant' }, { status: 400 })
+            return NextResponse.json({ success: false, message: 'Table does not belong to this restaurant' }, { status: 400 });
         }
 
         if (!table.active) {
-            return NextResponse.json({ success: false, message: 'Table is not active' }, { status: 400 })
+            return NextResponse.json({ success: false, message: 'Table is not active' }, { status: 400 });
         }
 
         // Calculate total
         const total_amount = (items as { price: number; quantity: number }[])
-            .reduce((sum, item) => sum + item.price * item.quantity, 0)
+            .reduce((sum, item) => sum + item.price * item.quantity, 0);
 
         const order = await prisma.order.create({
             data: {
@@ -63,11 +64,12 @@ export async function POST(req: NextRequest) {
                 priority: 0,
             },
             include: { table: { select: { tableNumber: true } } }
-        })
+        });
 
-        return NextResponse.json({ success: true, data: order }, { status: 201 })
-    } catch (error: any) {
-        return NextResponse.json({ success: false, message: error.message }, { status: 500 })
+        return NextResponse.json({ success: true, data: order }, { status: 201 });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return NextResponse.json({ success: false, message }, { status: 500 });
     }
 }
 
@@ -100,7 +102,8 @@ export async function GET(req: NextRequest) {
         }
 
         return NextResponse.json({ success: true, data: order })
-    } catch (error: any) {
-        return NextResponse.json({ success: false, message: error.message }, { status: 500 })
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return NextResponse.json({ success: false, message }, { status: 500 });
     }
 }
