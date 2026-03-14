@@ -43,9 +43,9 @@ export async function GET(req: NextRequest) {
         const itemCountMap: Record<string, { name: string; count: number; revenue: number }> = {}
         let totalItemsSold = 0
 
-        orders.forEach(order => {
+        orders.forEach((order: { items?: any[] }) => {
             const items = order.items as any[]
-            items?.forEach(item => {
+            items?.forEach((item: { name: string; quantity?: number; price?: number }) => {
                 if (!itemCountMap[item.name]) itemCountMap[item.name] = { name: item.name, count: 0, revenue: 0 }
                 itemCountMap[item.name].count += (item.quantity || 0)
                 itemCountMap[item.name].revenue += (item.price || 0) * (item.quantity || 0)
@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
 
         // Get top items
         const topItems = Object.values(itemCountMap)
-            .sort((a, b) => b.revenue - a.revenue)
+            .sort((a: { revenue: number }, b: { revenue: number }) => b.revenue - a.revenue)
             .slice(0, 10)
 
         return NextResponse.json({
