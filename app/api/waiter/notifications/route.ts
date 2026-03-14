@@ -35,7 +35,12 @@ export async function GET(req: NextRequest) {
         })
 
         // Format notifications
-        const notifications = orders.map(order => ({
+        const notifications = orders.map((order: {
+            id: string;
+            status: string;
+            updatedAt: string | number | Date;
+            table?: { tableNumber?: number } | null;
+        }) => ({
             id: order.id,
             title: order.status === 'ready' ? 'Order Ready for Pickup' : 'Order Served',
             message: `Order is ${order.status === 'ready' ? 'ready to be served' : 'marked as served'}`,
