@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
             }
         })
 
-        const revenueGeneratingOrders = orders.filter(o => ['served', 'completed'].includes(o.status))
+        const revenueGeneratingOrders = orders.filter((o: { status: string }) => ['served', 'completed'].includes(o.status))
         const totalOrders = revenueGeneratingOrders.length
 
         // Revenue should include the 10% (5% GST + 5% Service Charge) added in the bill modal
