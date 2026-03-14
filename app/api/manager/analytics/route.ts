@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
 
         // Best selling items (base calculation on quantity and price)
         const itemCountMap: Record<string, { name: string; count: number; revenue: number }> = {}
-        orders.forEach(order => {
+        orders.forEach((order: { status: string; items: any[] }) => {
             // Only count best sellers for served/completed orders for accuracy
             if (!['served', 'completed'].includes(order.status)) return
 
