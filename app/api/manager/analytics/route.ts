@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
 
         // Peak hours (group by hour)
         const hourMap: Record<number, number> = {}
-        orders.forEach(order => {
+        orders.forEach((order: { status: string; createdAt: string | number | Date }) => {
             if (['cancelled'].includes(order.status)) return
             const hour = new Date(order.createdAt).getHours()
             hourMap[hour] = (hourMap[hour] ?? 0) + 1
