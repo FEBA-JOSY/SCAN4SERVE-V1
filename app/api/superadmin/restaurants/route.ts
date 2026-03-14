@@ -18,7 +18,7 @@ export async function GET() {
         })
 
         // Format to include admin naturally for the frontend
-        const formatted = restaurants.map(r => ({
+        const formatted = restaurants.map((r: { users: any[] }) => ({
             ...r,
             admin: r.users[0] || null
         }))
