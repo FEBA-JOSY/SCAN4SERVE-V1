@@ -35,8 +35,8 @@ export async function GET(req: NextRequest) {
 
         // Calculate metrics
         const totalOrders = orders.length
-        const completedOrders = orders.filter(o => ['served', 'completed'].includes(o.status))
-        const totalRevenue = completedOrders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0)
+        const completedOrders = orders.filter((o: { status: string }) => ['served', 'completed'].includes(o.status))
+        const totalRevenue = completedOrders.reduce((sum: number, o: { totalAmount: number }) => sum + Number(o.totalAmount || 0), 0)
         const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0
 
         // Calculate items sold
