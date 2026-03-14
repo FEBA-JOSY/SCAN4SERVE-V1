@@ -33,7 +33,15 @@ export async function GET(req: NextRequest) {
             take: 100 // Last 100 orders
         })
 
-        const formattedOrders = orders.map(order => ({
+        const formattedOrders = orders.map((order: {
+            id: string;
+            table?: { tableNumber?: number } | null;
+            items?: any[];
+            totalAmount?: number;
+            status?: string;
+            paymentStatus?: string;
+            createdAt?: string | number | Date;
+        }) => ({
             id: order.id,
             tableNumber: order.table?.tableNumber || 0,
             items: Array.isArray(order.items) ? order.items : [],
