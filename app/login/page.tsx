@@ -37,23 +37,36 @@ export default function LoginPage() {
                 throw new Error(result.error)
             }
 
+            if (!result?.ok) {
+                throw new Error('Authentication failed')
+            }
+
             // Fetch user data to get the role for redirection
-            const response = await fetch('/api/auth/me')
+            // We use { cache: 'no-store' } to ensure we get the latest session data on Vercel
+            const response = await fetch('/api/auth/me', { cache: 'no-store' })
             const resultData = await response.json()
 
-            if (!resultData.success) {
+            if (!resultData.success || !resultData.data) {
                 throw new Error(resultData.message || 'Failed to fetch user data')
             }
 
             const userData = resultData.data
+            const role = userData.role?.toLowerCase()
+            const targetPath = ROLE_REDIRECT[role] || '/'
 
             toast.success(`Welcome back! Redirecting...`)
+            
+            // For Vercel, it's often better to use router.push + refresh 
+            // to ensure the session is properly recognized after the client navigation
             setTimeout(() => {
-                window.location.href = ROLE_REDIRECT[userData.role.toLowerCase()] || '/'
+                router.push(targetPath)
+                router.refresh()
             }, 500)
+            
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Login failed'
             toast.error(msg)
+            console.error('Login error:', err)
         } finally {
             setLoading(false)
         }
