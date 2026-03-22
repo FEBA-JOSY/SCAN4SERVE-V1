@@ -34,11 +34,11 @@ export async function GET(req: NextRequest) {
         })
 
         // Annotate each table with its latest active order
-        const enriched = tables.map(table => {
+        const enriched = tables.map((table: any) => {
             return {
                 ...table,
                 hasActiveOrder: table.orders.length > 0,
-                hasReadyOrder: table.orders.some(o => o.status === 'ready'),
+                hasReadyOrder: table.orders.some((o: any) => o.status === 'ready'),
                 activeOrders: table.orders,
             }
         })
