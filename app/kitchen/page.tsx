@@ -1,18 +1,18 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { Sidebar } from '@/components/sidebar'
 import { toast } from 'sonner'
 import {
     ChefHat, Clock, AlertCircle, CheckCircle2,
     ChevronRight, Timer, UtensilsCrossed, Volume2,
-    VolumeX, LayoutGrid, Search, Bell
+    VolumeX, LayoutGrid, Search, Bell, History
 } from 'lucide-react'
 import { cn, formatCurrency, formatTime, minutesAgo } from '@/lib/utils'
 import type { Order, User, Restaurant } from '@/types'
 
-type KitchenTab = 'orders' | 'notifications'
+type KitchenTab = 'orders' | 'notifications' | 'history'
 
 export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab?: KitchenTab } = {}) {
         // Fetch profile on mount to avoid infinite loading
@@ -31,7 +31,8 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
 
     useEffect(() => {
         if (pathname && pathname.endsWith('/notifications')) setActiveTab('notifications')
-        if (pathname && pathname.endsWith('/kitchen') || pathname === '/kitchen') setActiveTab('orders')
+        if (pathname && pathname.endsWith('/history')) setActiveTab('history')
+        if (pathname && (pathname.endsWith('/kitchen') || pathname === '/kitchen')) setActiveTab('orders')
     }, [pathname])
 
     useEffect(() => {
@@ -43,7 +44,7 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
         // Will be replaced with polling or Pusher/Ably if needed
         const interval = setInterval(() => {
             if (profile?.restaurantId) fetchOrders(profile.restaurantId)
-        }, 30000) // Poll every 30s as a fallback
+        }, 5000)
 
         return () => clearInterval(interval)
     }, [profile?.restaurantId])
@@ -203,6 +204,18 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
                                 <Bell className="w-3.5 h-3.5" />
                                 Notifications
                             </button>
+                            <button
+                                onClick={() => setActiveTab('history')}
+                                className={cn(
+                                    "flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-all duration-200",
+                                    activeTab === 'history'
+                                        ? "bg-orange-500 text-white shadow-lg shadow-orange-500/20"
+                                        : "text-gray-500 hover:text-gray-300"
+                                )}
+                            >
+                                <History className="w-3.5 h-3.5" />
+                                History
+                            </button>
                         </div>
                     </div>
                 </header>
@@ -330,8 +343,10 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
                                 ))}
                             </div>
                         )
-                    ) : (
+                    ) : activeTab === 'notifications' ? (
                         <NotificationsTab restaurantId={profile?.restaurantId} />
+                    ) : (
+                        <HistoryTab restaurantId={profile?.restaurantId} />
                     )}
                 </div>
             </main>
@@ -344,12 +359,16 @@ function NotificationsTab({ restaurantId }: { restaurantId?: string }) {
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        if (restaurantId) fetchNotifications()
+        if (restaurantId) {
+            fetchNotifications()
+            const interval = setInterval(() => fetchNotifications(), 5000)
+            return () => clearInterval(interval)
+        }
     }, [restaurantId])
 
     const fetchNotifications = async () => {
         if (!restaurantId) return
-        setLoading(true)
+        if (notifications.length === 0) setLoading(true)
         try {
             const res = await fetch(`/api/kitchen/notifications?restaurantId=${restaurantId}`)
             const json = await res.json()
@@ -404,6 +423,100 @@ function NotificationsTab({ restaurantId }: { restaurantId?: string }) {
                                 )}>
                                     {notif.type}
                                 </span>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    )
+}
+
+function HistoryTab({ restaurantId }: { restaurantId?: string }) {
+    const [history, setHistory] = useState<any[]>([])
+    const [loading, setLoading] = useState(true)
+    const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0])
+
+    const fetchHistory = useCallback(async () => {
+        if (!restaurantId) return
+        if (history.length === 0) setLoading(true)
+        try {
+            const res = await fetch(`/api/kitchen/orders?restaurantId=${restaurantId}&status=history&date=${selectedDate}`)
+            const json = await res.json()
+            if (json.success) {
+                setHistory(json.data || [])
+            }
+        } catch (e) {
+            toast.error('Failed to load history')
+        } finally {
+            setLoading(false)
+        }
+    }, [restaurantId, selectedDate, history.length])
+
+    useEffect(() => {
+        if (restaurantId) {
+            fetchHistory()
+            const interval = setInterval(() => fetchHistory(), 5000)
+            return () => clearInterval(interval)
+        }
+    }, [restaurantId, fetchHistory])
+
+    if (loading && history.length === 0) {
+        return (
+            <div className="flex items-center justify-center h-full">
+                <History className="w-8 h-8 text-orange-500 animate-spin" />
+            </div>
+        )
+    }
+
+    return (
+        <div className="space-y-6 fade-in">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                    <h3 className="font-bold text-white text-lg mb-2 text-shadow-sm uppercase italic tracking-tight">Order Prep History</h3>
+                    <p className="text-gray-400 text-sm">Review recently prepared orders</p>
+                </div>
+                
+                <div className="flex items-center gap-3 bg-gray-900 px-4 py-2 rounded-xl border border-gray-800">
+                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest leading-none">Select Date:</label>
+                    <input
+                        type="date"
+                        value={selectedDate}
+                        onChange={(e) => setSelectedDate(e.target.value)}
+                        className="bg-transparent border-none text-xs font-bold text-white focus:outline-none"
+                    />
+                </div>
+            </div>
+
+            {history.length === 0 ? (
+                <div className="glass-card p-12 text-center border-gray-800/40">
+                    <History className="w-12 h-12 text-gray-700 mx-auto mb-4" />
+                    <p className="text-gray-500 text-sm italic">No orders prepared on this date</p>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {history.map((order, idx) => (
+                        <div key={order.id || idx} className="glass-card flex flex-col h-fit group">
+                            <div className="p-4 flex items-center justify-between border-b border-gray-800/60 bg-gray-800/10">
+                                <div>
+                                    <span className="text-xl font-black text-white">#{order.table?.tableNumber || order.tableId.slice(-2)}</span>
+                                    <p className="text-[10px] text-gray-500 uppercase tracking-tighter mt-0.5">{order.status}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-[10px] text-gray-400 font-bold">{formatTime(order.createdAt)}</p>
+                                    <p className="text-[9px] text-gray-600 italic">ID: {order.id.slice(0, 8)}</p>
+                                </div>
+                            </div>
+                            <div className="p-4 space-y-2 flex-1">
+                                {order.items?.map((item: any, i: number) => (
+                                    <div key={i} className="flex justify-between items-center text-sm">
+                                        <span className="text-gray-400"><span className="text-orange-500 font-bold">{item.quantity}x</span> {item.name}</span>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="p-3 bg-gray-900/40 border-t border-gray-800/60 flex justify-between items-center px-4">
+                                <span className="text-[10px] text-gray-500 font-medium">Prepared & Ready</span>
+                                <CheckCircle2 className="w-4 h-4 text-green-500/60 group-hover:text-green-500 transition-colors" />
                             </div>
                         </div>
                     ))}

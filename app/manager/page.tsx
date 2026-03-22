@@ -74,23 +74,9 @@ export default function ManagerDashboard({ initialTab = 'overview' }: { initialT
 
             <main className="flex-1 flex flex-col min-w-0">
                 <header className="h-16 flex items-center justify-between px-8 border-b border-gray-800/60 glass z-20">
-                    <h2 className="text-xl font-bold text-white tracking-tight">Manager Hub</h2>
-                    <div className="flex items-center gap-2 bg-gray-900 p-1 rounded-xl border border-gray-800">
-                        {tabs.map(tab => (
-                            <button
-                                key={tab.id}
-                                onClick={() => setActiveTab(tab.id as ManagerTab)}
-                                className={cn(
-                                    "flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-all duration-200",
-                                    activeTab === tab.id
-                                        ? "bg-orange-500 text-white shadow-lg shadow-orange-500/20"
-                                        : "text-gray-500 hover:text-gray-300"
-                                )}
-                            >
-                                <tab.icon className="w-3.5 h-3.5" />
-                                {tab.label}
-                            </button>
-                        ))}
+                    <div className="flex items-center gap-3">
+                        <TrendingUp className="w-5 h-5 text-orange-500" />
+                        <h2 className="text-xl font-bold text-white tracking-tight">Manager Hub</h2>
                     </div>
                 </header>
 
@@ -126,32 +112,73 @@ interface AnalyticsData {
 function OverviewTab({ restaurantId }: { restaurantId: string }) {
     const [stats, setStats] = useState<AnalyticsData | null>(null)
     const [loading, setLoading] = useState(true)
+    const [dateRange, setDateRange] = useState({
+        startDate: new Date().toISOString().split('T')[0],
+        endDate: new Date().toISOString().split('T')[0]
+    })
 
     const fetchAnalytics = useCallback(async () => {
+        setLoading(true)
         try {
-            const res = await fetch(`/api/manager/analytics?restaurantId=${restaurantId}`)
+            const url = `/api/manager/analytics?restaurantId=${restaurantId}&startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`
+            const res = await fetch(url)
             const json = await res.json()
             if (json.success) setStats(json.data)
         } finally {
             setLoading(false)
         }
-    }, [restaurantId])
+    }, [restaurantId, dateRange])
 
     useEffect(() => {
         if (restaurantId) fetchAnalytics()
     }, [restaurantId, fetchAnalytics])
 
-    if (loading) return null
+    if (loading && !stats) return <div className="h-48 flex items-center justify-center"><Loader2 className="w-8 h-8 text-orange-500 animate-spin" /></div>
 
     const cards = [
-        { label: 'Today Orders', value: stats?.totalOrders || 0, icon: ShoppingBag, color: 'text-blue-400', bg: 'bg-blue-500/10' },
-        { label: 'Today Revenue', value: formatCurrency(stats?.revenueToday || 0), icon: DollarSign, color: 'text-green-400', bg: 'bg-green-500/10' },
-        { label: 'Total Revenue', value: formatCurrency(stats?.totalRevenue || 0), icon: TrendingUp, color: 'text-orange-400', bg: 'bg-orange-500/10' },
+        { label: 'Orders in Period', value: stats?.totalOrders || 0, icon: ShoppingBag, color: 'text-blue-400', bg: 'bg-blue-500/10' },
+        { label: 'Period Revenue', value: formatCurrency(stats?.revenueToday || 0), icon: DollarSign, color: 'text-green-400', bg: 'bg-green-500/10' },
+        { label: 'All-Time Revenue', value: formatCurrency(stats?.totalRevenue || 0), icon: TrendingUp, color: 'text-orange-400', bg: 'bg-orange-500/10' },
         { label: 'Avg Order Value', value: formatCurrency(stats?.totalOrders ? (stats.revenueToday / stats.totalOrders) : 0), icon: BarChart3, color: 'text-purple-400', bg: 'bg-purple-500/10' },
     ]
 
     return (
         <div className="space-y-8 fade-in">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h3 className="text-xl font-black text-white italic tracking-tight">BUSINESS ANALYSIS</h3>
+                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-1">Real-time revenue & order statistics</p>
+                </div>
+
+                <div className="flex items-center gap-4 bg-gray-900/50 p-2 rounded-xl border border-gray-800">
+                    <div className="flex items-center gap-3 px-2">
+                        <Filter className="w-3.5 h-3.5 text-gray-500" />
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="date"
+                                value={dateRange.startDate}
+                                onChange={e => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
+                                className="bg-transparent border-none text-[10px] font-bold text-white focus:outline-none"
+                            />
+                            <span className="text-gray-700 font-bold">to</span>
+                            <input
+                                type="date"
+                                value={dateRange.endDate}
+                                onChange={e => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
+                                className="bg-transparent border-none text-[10px] font-bold text-white focus:outline-none"
+                            />
+                        </div>
+                    </div>
+                    <button
+                        onClick={fetchAnalytics}
+                        disabled={loading}
+                        className="brand-gradient px-4 py-1.5 rounded-lg text-[10px] font-black text-white hover:scale-105 active:scale-95 transition-all shadow-lg shadow-orange-500/20 border-0"
+                    >
+                        {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : 'APPLY FILTER'}
+                    </button>
+                </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {cards.map(card => (
                     <div key={card.label} className="glass-card p-6">
@@ -380,18 +407,28 @@ function MenuModal({ restaurantId, categories, item, onClose }: { restaurantId: 
         name: item?.name || '',
         price: item?.price || '',
         description: item?.description || '',
-        // keep camelCase internally for ease of use in the UI
-        categoryId: item?.categoryId || (categories[0]?.id || ''),
+        categoryId: item?.categoryId || (categories.length > 0 ? categories[0].id : ''),
         isVeg: item?.isVeg ?? true,
         imageUrl: item?.imageUrl || '',
-        prepTimeMinutes: item?.prepTimeMinutes || 15
+        prepTimeMinutes: item?.prepTimeMinutes || 15,
+        available: item?.available ?? true
     })
+
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (file) {
+            const reader = new FileReader()
+            reader.onloadend = () => {
+                setForm({ ...form, imageUrl: reader.result as string })
+            }
+            reader.readAsDataURL(file)
+        }
+    }
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
         setLoading(true)
         const method = item ? 'PATCH' : 'POST'
-        // convert our camelCase form to the snake_case API contract
         const payload: Record<string, unknown> = {
             restaurant_id: restaurantId,
             name: form.name,
@@ -401,7 +438,7 @@ function MenuModal({ restaurantId, categories, item, onClose }: { restaurantId: 
             image_url: form.imageUrl,
             is_veg: form.isVeg,
             prep_time_minutes: form.prepTimeMinutes,
-            available: true // default for new/updated items
+            available: form.available
         }
         if (item?.id) payload.id = item.id
 
@@ -440,13 +477,33 @@ function MenuModal({ restaurantId, categories, item, onClose }: { restaurantId: 
                         </div>
                         <div>
                             <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 block">Category</label>
-                                            <select value={form.categoryId} onChange={e => setForm({ ...form, categoryId: e.target.value })} className="w-full bg-gray-950/50 border border-gray-800 rounded-xl px-4 py-3 text-white text-sm focus:border-orange-500/50 appearance-none">
+                            <select value={form.categoryId} onChange={e => setForm({ ...form, categoryId: e.target.value })} className="w-full bg-gray-950/50 border border-gray-800 rounded-xl px-4 py-3 text-white text-sm focus:border-orange-500/50 appearance-none">
                                 {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
                             </select>
                         </div>
                         <div className="col-span-2">
                             <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 block">Description</label>
                             <textarea rows={2} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="w-full bg-gray-950/50 border border-gray-800 rounded-xl px-4 py-3 text-white text-sm focus:border-orange-500/50" />
+                        </div>
+                        <div className="col-span-2">
+                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 block">Dish Image (URL or Upload)</label>
+                            <div className="flex gap-4 items-center">
+                                {form.imageUrl && (
+                                    <div className="w-16 h-16 rounded-lg overflow-hidden shrink-0 border border-gray-800 relative bg-gray-900">
+                                        <Image src={form.imageUrl} alt="Preview" fill className="object-cover" />
+                                    </div>
+                                )}
+                                <div className="flex-1 space-y-2">
+                                    <input type="url" value={form.imageUrl} onChange={e => setForm({ ...form, imageUrl: e.target.value })} placeholder="Paste Image URL..." className="w-full bg-gray-950/50 border border-gray-800 rounded-xl px-4 py-3 text-white text-sm focus:border-orange-500/50" />
+                                    <div className="flex items-center gap-2 mt-1">
+                                        <span className="text-gray-500 text-[10px] font-bold uppercase">OR</span>
+                                        <label className="cursor-pointer bg-gray-800 hover:bg-gray-700 text-white text-[10px] font-bold uppercase px-3 py-1.5 rounded-lg transition-colors inline-block">
+                                            Select image from files
+                                            <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         <div>
                             <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 block">Type</label>
@@ -466,6 +523,21 @@ function MenuModal({ restaurantId, categories, item, onClose }: { restaurantId: 
                         <div>
                             <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 block">Prep Time (mins)</label>
                             <input type="number" value={form.prepTimeMinutes} onChange={e => setForm({ ...form, prepTimeMinutes: parseInt(e.target.value) })} className="w-full bg-gray-950/50 border border-gray-800 rounded-xl px-4 py-3 text-white text-sm focus:border-orange-500/50" />
+                        </div>
+                        <div className="col-span-2">
+                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 block">Availability</label>
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setForm({ ...form, available: true })}
+                                    className={cn("flex-1 py-3 rounded-xl border text-[10px] font-black uppercase transition-all", form.available ? "bg-green-600/10 border-green-600 text-green-500" : "bg-gray-800 border-gray-800 text-gray-600")}
+                                >In Stock</button>
+                                <button
+                                    type="button"
+                                    onClick={() => setForm({ ...form, available: false })}
+                                    className={cn("flex-1 py-3 rounded-xl border text-[10px] font-black uppercase transition-all", !form.available ? "bg-red-600/10 border-red-600 text-red-500" : "bg-gray-800 border-gray-800 text-gray-600")}
+                                >Out of Stock</button>
+                            </div>
                         </div>
                     </div>
 
@@ -666,12 +738,21 @@ function OrdersTab({ restaurantId }: { restaurantId?: string }) {
     const [orders, setOrders] = useState<OrderData[]>([])
     const [loading, setLoading] = useState(true)
     const [filter, setFilter] = useState<'all' | 'placed' | 'preparing' | 'ready' | 'served' | 'completed'>('all')
+    const [dateRange, setDateRange] = useState({
+        startDate: new Date().toISOString().split('T')[0],
+        endDate: new Date().toISOString().split('T')[0]
+    })
 
     const fetchOrders = useCallback(async () => {
         if (!restaurantId) return
         setLoading(true)
         try {
-            const res = await fetch(`/api/manager/orders?restaurantId=${restaurantId}`)
+            let url = `/api/manager/orders?restaurantId=${restaurantId}`
+            if (dateRange.startDate && dateRange.endDate) {
+                // To get full day, we normalize dates
+                url += `&startDate=${dateRange.startDate}T00:00:00.000Z&endDate=${dateRange.endDate}T23:59:59.999Z`
+            }
+            const res = await fetch(url)
             const json = await res.json()
             if (json.success) {
                 setOrders(json.data || [])
@@ -682,7 +763,7 @@ function OrdersTab({ restaurantId }: { restaurantId?: string }) {
         } finally {
             setLoading(false)
         }
-    }, [restaurantId])
+    }, [restaurantId, dateRange])
 
     useEffect(() => {
         if (restaurantId) fetchOrders()
@@ -709,9 +790,16 @@ function OrdersTab({ restaurantId }: { restaurantId?: string }) {
         }
     }, [fetchOrders])
 
-    const filteredOrders = filter === 'all' 
-        ? orders 
+    const filteredOrders = filter === 'all'
+        ? orders
         : orders.filter(o => o.status === filter)
+
+    const totalRevenue = filteredOrders.reduce((sum, order) => {
+        if (order.paymentStatus === 'paid' && order.status !== 'cancelled') {
+            return sum + (typeof order.totalAmount === 'number' ? order.totalAmount : Number(order.totalAmount))
+        }
+        return sum
+    }, 0)
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -745,22 +833,67 @@ function OrdersTab({ restaurantId }: { restaurantId?: string }) {
         <div className="space-y-6 fade-in">
             <div>
                 <h3 className="font-bold text-white text-lg mb-4">Restaurant Orders</h3>
-                <div className="flex gap-2 flex-wrap">
-                    {(['all', 'placed', 'preparing', 'ready', 'served', 'completed'] as const).map(status => (
-                        <button
-                            key={status}
-                            onClick={() => setFilter(status)}
-                            className={cn(
-                                "px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide transition-all",
-                                filter === status
-                                    ? "bg-orange-500 text-white shadow-lg shadow-orange-500/20"
-                                    : "bg-gray-800/50 text-gray-400 hover:text-gray-300"
-                            )}
-                        >
-                            {status === 'all' ? 'All Orders' : status.charAt(0).toUpperCase() + status.slice(1)}
-                        </button>
-                    ))}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex gap-2 flex-wrap">
+                        {(['all', 'placed', 'preparing', 'ready', 'served', 'completed'] as const).map(status => (
+                            <button
+                                key={status}
+                                onClick={() => setFilter(status)}
+                                className={cn(
+                                    "px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide transition-all",
+                                    filter === status
+                                        ? "bg-orange-500 text-white shadow-lg shadow-orange-500/20"
+                                        : "bg-gray-800/50 text-gray-400 hover:text-gray-300"
+                                )}
+                            >
+                                {status === 'all' ? 'All Orders' : status.charAt(0).toUpperCase() + status.slice(1)}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="flex items-center gap-2 bg-gray-900/50 p-2 rounded-xl border border-gray-800">
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest pl-1">Period:</span>
+                            <input
+                                type="date"
+                                value={dateRange.startDate}
+                                onChange={e => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
+                                className="bg-transparent border-none text-[10px] font-bold text-white focus:outline-none"
+                            />
+                            <span className="text-gray-700">-</span>
+                            <input
+                                type="date"
+                                value={dateRange.endDate}
+                                onChange={e => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
+                                className="bg-transparent border-none text-[10px] font-bold text-white focus:outline-none"
+                            />
+                            <button
+                                onClick={fetchOrders}
+                                className="p-1 px-2 bg-orange-500 hover:bg-orange-600 rounded text-[8px] font-black text-white uppercase tracking-widest transition-colors"
+                            >
+                                Refresh
+                            </button>
+                        </div>
+                    </div>
                 </div>
+
+                {dateRange.startDate && dateRange.endDate && (
+                    <div className="glass-card p-4 border border-orange-500/10 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-orange-500/10 rounded-lg text-orange-500">
+                                <DollarSign className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Selected Period Revenue</p>
+                                <p className="text-xl font-black text-white">{formatCurrency(totalRevenue)}</p>
+                            </div>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{filteredOrders.length} Orders</p>
+                            <p className="text-xs font-bold text-orange-500 opacity-80 italic">Success Rate: {Math.round((filteredOrders.filter(o => o.status === 'completed' || o.status === 'served').length / (filteredOrders.length || 1)) * 100)}%</p>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {filteredOrders.length === 0 ? (
@@ -792,9 +925,9 @@ function OrdersTab({ restaurantId }: { restaurantId?: string }) {
                                             <span className="text-sm font-bold text-orange-400">
                                                 {formatCurrency(Number(order.totalAmount))}
                                             </span>
-                                            <span className={cn("text-[10px] font-bold uppercase px-2 py-1 rounded-lg", 
-                                                order.paymentStatus === 'paid' 
-                                                    ? 'bg-green-500/10 text-green-400' 
+                                            <span className={cn("text-[10px] font-bold uppercase px-2 py-1 rounded-lg",
+                                                order.paymentStatus === 'paid'
+                                                    ? 'bg-green-500/10 text-green-400'
                                                     : 'bg-red-500/10 text-red-400'
                                             )}>
                                                 Payment: {order.paymentStatus}

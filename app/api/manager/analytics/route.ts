@@ -5,14 +5,24 @@ import { NextRequest, NextResponse } from 'next/server'
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const restaurantId = searchParams.get('restaurantId')
+    const startDateParam = searchParams.get('startDate')
+    const endDateParam = searchParams.get('endDate')
     const date = searchParams.get('date') ?? new Date().toISOString().split('T')[0]
+
+    let start: Date;
+    let end: Date;
+
+    if (startDateParam && endDateParam) {
+        start = new Date(`${startDateParam}T00:00:00.000Z`)
+        end = new Date(`${endDateParam}T23:59:59.999Z`)
+    } else {
+        start = new Date(`${date}T00:00:00.000Z`)
+        end = new Date(`${date}T23:59:59.999Z`)
+    }
 
     if (!restaurantId) {
         return NextResponse.json({ success: false, message: 'restaurantId required' }, { status: 400 })
     }
-
-    const startOfDay = new Date(`${date}T00:00:00.000Z`)
-    const endOfDay = new Date(`${date}T23:59:59.999Z`)
 
     try {
         // Today's orders
@@ -20,8 +30,8 @@ export async function GET(req: NextRequest) {
             where: {
                 restaurantId,
                 createdAt: {
-                    gte: startOfDay,
-                    lte: endOfDay
+                    gte: start,
+                    lte: end
                 }
             },
             select: {
@@ -33,16 +43,16 @@ export async function GET(req: NextRequest) {
             }
         })
 
-        const revenueGeneratingOrders = orders.filter((o: { status: string }) => ['served', 'completed'].includes(o.status))
+        const revenueGeneratingOrders = orders.filter((o: any) => ['served', 'completed'].includes(o.status))
         const totalOrders = revenueGeneratingOrders.length
 
         // Revenue should include the 10% (5% GST + 5% Service Charge) added in the bill modal
         const revenueToday = revenueGeneratingOrders
-            .reduce((sum: number, o: { totalAmount: number }) => sum + Number(o.totalAmount || 0) * 1.10, 0)
+            .reduce((sum: number, o: any) => sum + Number(o.totalAmount || 0) * 1.10, 0)
 
         // Best selling items (base calculation on quantity and price)
         const itemCountMap: Record<string, { name: string; count: number; revenue: number }> = {}
-        orders.forEach((order: { status: string; items: any[] }) => {
+        orders.forEach((order: any) => {
             // Only count best sellers for served/completed orders for accuracy
             if (!['served', 'completed'].includes(order.status)) return
 
@@ -81,7 +91,7 @@ export async function GET(req: NextRequest) {
         })
 
         // Apply 1.10 factor to all-time revenue as well
-        const totalRevenue = Number(allTimeRevenueResult._sum.totalAmount || 0) * 1.10
+        const totalRevenue = Number(allTimeRevenueResult?._sum?.totalAmount || 0) * 1.10
 
         return NextResponse.json({
             success: true,

@@ -113,11 +113,20 @@ export async function PATCH(request: Request) {
     }
 
     try {
-        const { id, isActive } = await request.json();
+        const { id, isActive, name, email, role, password } = await request.json();
+
+        const updateData: any = {};
+        if (isActive !== undefined) updateData.isActive = isActive;
+        if (name !== undefined) updateData.name = name;
+        if (email !== undefined) updateData.email = email;
+        if (role !== undefined) updateData.role = role;
+        if (password) {
+            updateData.password = await bcrypt.hash(password, 10);
+        }
 
         const staff = await prisma.user.update({
-            where: { id },
-            data: { isActive },
+            where: { id, restaurantId: session.user.restaurantId },
+            data: updateData,
             select: {
                 id: true,
                 name: true,
@@ -129,6 +138,40 @@ export async function PATCH(request: Request) {
         });
 
         return NextResponse.json({ success: true, data: staff });
+    } catch (error: any) {
+        return NextResponse.json(
+            { success: false, message: error.message },
+            { status: 500 }
+        );
+    }
+}
+
+export async function DELETE(request: Request) {
+    const session = await getServerSession(authOptions);
+
+    if (!session || !session.user || session.user.role !== "admin") {
+        return NextResponse.json(
+            { success: false, message: "Not authorized" },
+            { status: 401 }
+        );
+    }
+
+    try {
+        const { searchParams } = new URL(request.url);
+        const id = searchParams.get('id');
+
+        if (!id) {
+            return NextResponse.json(
+                { success: false, message: "Staff ID is required" },
+                { status: 400 }
+            );
+        }
+
+        await prisma.user.delete({
+            where: { id, restaurantId: session.user.restaurantId }
+        });
+
+        return NextResponse.json({ success: true, message: "Staff deleted successfully" });
     } catch (error: any) {
         return NextResponse.json(
             { success: false, message: error.message },

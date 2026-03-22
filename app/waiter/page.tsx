@@ -33,8 +33,10 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
 
         // Real-time updates disabled, using polling
         const interval = setInterval(() => {
-            if (profile?.restaurantId) fetchTables(profile.restaurantId)
-        }, 30000)
+            if (profile?.restaurantId) {
+                fetchTables(profile.restaurantId)
+            }
+        }, 5000)
 
         return () => clearInterval(interval)
     }, [profile?.restaurantId])
@@ -314,14 +316,30 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
 function NotificationsTab({ restaurantId }: { restaurantId?: string }) {
     const [notifications, setNotifications] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
+    const [activeSection, setActiveSection] = useState<'alerts' | 'delivered'>('alerts')
+    const [deliveredOrders, setDeliveredOrders] = useState<any[]>([])
+    const [loadingDelivered, setLoadingDelivered] = useState(false)
+    const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0])
 
     useEffect(() => {
-        if (restaurantId) fetchNotifications()
+        if (restaurantId) {
+            fetchNotifications()
+            const interval = setInterval(() => fetchNotifications(), 5000)
+            return () => clearInterval(interval)
+        }
     }, [restaurantId])
+
+    useEffect(() => {
+        if (restaurantId && activeSection === 'delivered') {
+            fetchDeliveredOrders()
+            const interval = setInterval(() => fetchDeliveredOrders(), 5000)
+            return () => clearInterval(interval)
+        }
+    }, [restaurantId, activeSection, selectedDate])
 
     const fetchNotifications = async () => {
         if (!restaurantId) return
-        setLoading(true)
+        if (notifications.length === 0) setLoading(true)
         try {
             const res = await fetch(`/api/waiter/notifications?restaurantId=${restaurantId}`)
             const json = await res.json()
@@ -335,7 +353,23 @@ function NotificationsTab({ restaurantId }: { restaurantId?: string }) {
         }
     }
 
-    if (loading) {
+    const fetchDeliveredOrders = async () => {
+        if (!restaurantId) return
+        setLoadingDelivered(true)
+        try {
+            const res = await fetch(`/api/waiter/delivered-orders?restaurantId=${restaurantId}&date=${selectedDate}`)
+            const json = await res.json()
+            if (json.success) {
+                setDeliveredOrders(json.data || [])
+            }
+        } catch (e) {
+            toast.error('Failed to load delivered orders')
+        } finally {
+            setLoadingDelivered(false)
+        }
+    }
+
+    if (loading && activeSection === 'alerts') {
         return (
             <div className="flex items-center justify-center h-full">
                 <Bell className="w-8 h-8 text-orange-500 animate-bounce" />
@@ -344,41 +378,107 @@ function NotificationsTab({ restaurantId }: { restaurantId?: string }) {
     }
 
     return (
-        <div className="space-y-4 fade-in">
-            <div>
-                <h3 className="font-bold text-white text-lg mb-4">Order Notifications</h3>
-                <p className="text-gray-400 text-sm">Recent updates and alerts for your restaurant</p>
+        <div className="space-y-6 fade-in">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                    <h3 className="font-bold text-white text-lg mb-2">Order Notifications & History</h3>
+                    <p className="text-gray-400 text-sm">Recent updates and delivered orders</p>
+                </div>
+                
+                <div className="flex bg-gray-900 rounded-lg p-1 border border-gray-800">
+                    <button
+                        onClick={() => setActiveSection('alerts')}
+                        className={cn("px-4 py-1.5 rounded-md text-xs font-bold transition-all", activeSection === 'alerts' ? "bg-gray-800 text-white shadow-sm" : "text-gray-500 hover:text-gray-300")}
+                    >Alerts</button>
+                    <button
+                        onClick={() => setActiveSection('delivered')}
+                        className={cn("px-4 py-1.5 rounded-md text-xs font-bold transition-all", activeSection === 'delivered' ? "bg-gray-800 text-white shadow-sm" : "text-gray-500 hover:text-gray-300")}
+                    >Delivered</button>
+                </div>
             </div>
 
-            {notifications.length === 0 ? (
-                <div className="glass-card p-12 text-center">
-                    <Bell className="w-12 h-12 text-gray-700 mx-auto mb-4" />
-                    <p className="text-gray-500">No notifications yet</p>
-                </div>
-            ) : (
-                <div className="space-y-3 max-w-2xl">
-                    {notifications.map((notif, idx) => (
-                        <div key={idx} className="glass-card p-4 border border-gray-800/40 hover:border-orange-500/20 transition-all">
-                            <div className="flex items-start gap-4">
-                                <div className="w-2 h-2 rounded-full bg-orange-500 mt-2 shrink-0" />
-                                <div className="flex-1">
-                                    <h4 className="font-bold text-white">{notif.title}</h4>
-                                    <p className="text-sm text-gray-400 mt-1">{notif.message}</p>
-                                    <p className="text-xs text-gray-500 mt-2">
-                                        Table {notif.tableNumber} • {notif.timestamp}
-                                    </p>
+            {activeSection === 'alerts' ? (
+                notifications.length === 0 ? (
+                    <div className="glass-card p-12 text-center">
+                        <Bell className="w-12 h-12 text-gray-700 mx-auto mb-4" />
+                        <p className="text-gray-500">No notifications yet</p>
+                    </div>
+                ) : (
+                    <div className="space-y-3 max-w-2xl">
+                        {notifications.map((notif, idx) => (
+                            <div key={idx} className="glass-card p-4 border border-gray-800/40 hover:border-orange-500/20 transition-all">
+                                <div className="flex items-start gap-4">
+                                    <div className="w-2 h-2 rounded-full bg-orange-500 mt-2 shrink-0" />
+                                    <div className="flex-1">
+                                        <h4 className="font-bold text-white">{notif.title}</h4>
+                                        <p className="text-sm text-gray-400 mt-1">{notif.message}</p>
+                                        <p className="text-xs text-gray-500 mt-2">
+                                            Table {notif.tableNumber} • {new Date(notif.timestamp).toLocaleTimeString() || notif.timestamp}
+                                        </p>
+                                    </div>
+                                    <span className={cn(
+                                        "text-[10px] font-bold uppercase px-2 py-1 rounded-lg shrink-0",
+                                        notif.type === 'ready' ? 'bg-orange-500/10 text-orange-400' :
+                                            notif.type === 'order' ? 'bg-blue-500/10 text-blue-400' :
+                                                'bg-gray-500/10 text-gray-400'
+                                    )}>
+                                        {notif.type}
+                                    </span>
                                 </div>
-                                <span className={cn(
-                                    "text-[10px] font-bold uppercase px-2 py-1 rounded-lg shrink-0",
-                                    notif.type === 'ready' ? 'bg-orange-500/10 text-orange-400' :
-                                        notif.type === 'order' ? 'bg-blue-500/10 text-blue-400' :
-                                            'bg-gray-500/10 text-gray-400'
-                                )}>
-                                    {notif.type}
-                                </span>
                             </div>
+                        ))}
+                    </div>
+                )
+            ) : (
+                <div className="space-y-4">
+                    <div className="flex items-center gap-2 mb-4">
+                        <label className="text-xs font-bold text-gray-500 uppercase">Select Date:</label>
+                        <input
+                            type="date"
+                            value={selectedDate}
+                            onChange={(e) => setSelectedDate(e.target.value)}
+                            className="bg-gray-950/50 border border-gray-800 rounded-lg px-3 py-1.5 text-white text-sm"
+                        />
+                    </div>
+                    {loadingDelivered ? (
+                        <div className="flex items-center justify-center p-8"><ClipboardList className="w-8 h-8 text-orange-500 animate-bounce" /></div>
+                    ) : deliveredOrders.length === 0 ? (
+                        <div className="glass-card p-12 text-center">
+                            <Utensils className="w-12 h-12 text-gray-700 mx-auto mb-4" />
+                            <p className="text-gray-500">No delivered orders for {selectedDate}</p>
                         </div>
-                    ))}
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {deliveredOrders.map((order, idx) => (
+                                <div key={order.id || idx} className="glass-card p-5 border border-gray-800/40 hover:border-orange-500/20 transition-all flex flex-col h-full">
+                                    <div className="flex justify-between items-center mb-4 border-b border-gray-800/60 pb-3">
+                                        <h3 className="font-bold text-white text-lg">Table {order.tableNumber}</h3>
+                                        <div className="flex flex-col items-end">
+                                            <span className={cn(
+                                                "text-[10px] font-bold uppercase px-2 py-0.5 rounded",
+                                                order.status === 'completed' ? 'bg-green-500/10 text-green-500' : 'bg-blue-500/10 text-blue-500'
+                                            )}>{order.status}</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex-1 space-y-2 mb-4">
+                                        {order.items?.map((item: any, i: number) => (
+                                            <div key={i} className="flex justify-between text-sm text-gray-400">
+                                                <span>{item.quantity}x {item.name}</span>
+                                                <span>{formatCurrency(item.price * item.quantity)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="mt-auto pt-3 border-t border-gray-800 flex justify-between items-center">
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] text-gray-500">{new Date(order.createdAt).toLocaleTimeString()}</span>
+                                            <span className="text-[10px] text-gray-500 capitalize">{order.paymentStatus} Payment</span>
+                                        </div>
+                                        <span className="font-bold text-orange-500 text-lg">{formatCurrency(order.totalAmount)}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             )}
         </div>

@@ -22,7 +22,7 @@ export default function CustomerMenuPage() {
     const [loading, setLoading] = useState(true)
     const [cart, setCart] = useState<Record<string, { item: MenuItem; quantity: number; notes: string }>>({})
     const [showCart, setShowCart] = useState(false)
-    const [activeCategory, setActiveCategory] = useState<string>('')
+    const [activeCategory, setActiveCategory] = useState<string>('all')
     const [searchQuery, setSearchQuery] = useState('')
     const [placingOrder, setPlacingOrder] = useState(false)
     const [activeOrder, setActiveOrder] = useState<Order | null>(null)
@@ -41,7 +41,7 @@ export default function CustomerMenuPage() {
                 setRestaurant(json.data.restaurant)
                 setCategories(json.data.categories)
                 if (json.data.categories.length > 0) {
-                    setActiveCategory(json.data.categories[0].id)
+                    // We default to 'all' now
                 }
             } else {
                 toast.error(json.message || 'Failed to load menu')
@@ -196,6 +196,17 @@ export default function CustomerMenuPage() {
 
                 {/* Categories Scroller */}
                 <div className="flex items-center gap-2 px-4 pb-4 overflow-x-auto no-scrollbar">
+                    <button
+                        onClick={() => setActiveCategory('all')}
+                        className={cn(
+                            "whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium transition-all duration-200",
+                            activeCategory === 'all'
+                                ? "bg-orange-500 text-white shadow-lg shadow-orange-500/20"
+                                : "bg-gray-900 text-gray-400 border border-gray-800 hover:border-gray-700"
+                        )}
+                    >
+                        All
+                    </button>
                     {categories.map(cat => (
                         <button
                             key={cat.id}
@@ -215,7 +226,9 @@ export default function CustomerMenuPage() {
 
             {/* Menu Content */}
             <main className="p-4 space-y-8">
-                {categories.map(category => {
+                {categories
+                    .filter(cat => activeCategory === 'all' || cat.id === activeCategory)
+                    .map(category => {
                     const filteredItems = category.menuItems?.filter(item =>
                         item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                         item.description?.toLowerCase().includes(searchQuery.toLowerCase())

@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import {
     UtensilsCrossed, LayoutDashboard, ChefHat, Users, ShoppingBag,
     BarChart3, Table2, Settings, LogOut, Building2, Bell, Wallet,
-    ClipboardList, ScrollText
+    ClipboardList, ScrollText, History
 } from 'lucide-react'
 import type { UserRole } from '@/types'
 
@@ -40,7 +40,9 @@ const ROLE_NAV: Record<UserRole, { label: string; href: string; icon: React.Elem
     ],
     kitchen: [
         { label: 'Order Queue', href: '/kitchen', icon: ClipboardList },
+        { label: 'Menu', href: '/kitchen/menu', icon: ChefHat },
         { label: 'Notifications', href: '/kitchen/notifications', icon: Bell },
+        { label: 'Order History', href: '/kitchen/history', icon: History },
     ],
     waiter: [
         { label: 'Tables', href: '/waiter', icon: Table2 },

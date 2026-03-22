@@ -35,15 +35,15 @@ export async function GET(req: NextRequest) {
 
         // Calculate metrics
         const totalOrders = orders.length
-        const completedOrders = orders.filter((o: { status: string }) => ['served', 'completed'].includes(o.status))
-        const totalRevenue = completedOrders.reduce((sum: number, o: { totalAmount: number }) => sum + Number(o.totalAmount || 0), 0)
+        const completedOrders: any[] = orders.filter((o: any) => ['served', 'completed'].includes(o.status))
+        const totalRevenue = completedOrders.reduce((sum: number, o: any) => sum + Number(o.totalAmount || 0), 0)
         const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0
 
         // Calculate items sold
         const itemCountMap: Record<string, { name: string; count: number; revenue: number }> = {}
         let totalItemsSold = 0
 
-        orders.forEach((order: { items?: any[] }) => {
+        orders.forEach((order: any) => {
             const items = order.items as any[]
             items?.forEach((item: { name: string; quantity?: number; price?: number }) => {
                 if (!itemCountMap[item.name]) itemCountMap[item.name] = { name: item.name, count: 0, revenue: 0 }

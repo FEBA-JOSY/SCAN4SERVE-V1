@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     try {
         const hashedPassword = await bcrypt.hash(adminPassword, 10)
 
-        const result = await prisma.$transaction(async (tx: typeof prisma) => {
+        const result = await prisma.$transaction(async (tx: any) => {
             // 1. Create restaurant
             const restaurant = await tx.restaurant.create({
                 data: {

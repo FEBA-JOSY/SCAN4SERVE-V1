@@ -60,6 +60,7 @@ export async function PATCH(req: NextRequest) {
         if (updates.name) formattedUpdates.name = updates.name
         if (updates.description) formattedUpdates.description = updates.description
         if (updates.price) formattedUpdates.price = Number(updates.price)
+        if (updates.category_id) formattedUpdates.categoryId = updates.category_id
         if (updates.image_url) formattedUpdates.imageUrl = updates.image_url
         if (updates.is_veg !== undefined) formattedUpdates.isVeg = updates.is_veg
         if (updates.prep_time_minutes !== undefined) formattedUpdates.prepTimeMinutes = updates.prep_time_minutes

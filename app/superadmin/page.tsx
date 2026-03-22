@@ -8,7 +8,7 @@ import {
     ShieldAlert, Globe, Activity, Building2,
     Users, DollarSign, TrendingUp, Search,
     Plus, MoreVertical, CheckCircle2, XCircle,
-    Loader2, AlertCircle, ArrowUpRight, Camera, Pencil
+    Loader2, AlertCircle, ArrowUpRight, Camera, Pencil, Trash2
 } from 'lucide-react'
 import { cn, formatCurrency } from '@/lib/utils'
 import type { Restaurant, User } from '@/types'
@@ -19,6 +19,7 @@ export default function SuperAdminDashboard() {
     const [loading, setLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState('')
     const [showOnboardModal, setShowOnboardModal] = useState(false)
+    const [openDropdownId, setOpenDropdownId] = useState<string | null>(null)
     const [editingId, setEditingId] = useState<string | null>(null)
     const [onboarding, setOnboarding] = useState(false)
     const [formData, setFormData] = useState({
@@ -99,7 +100,10 @@ export default function SuperAdminDashboard() {
                 subdomain: formData.subdomain,
                 email: formData.email,
                 logoUrl: formData.logoUrl,
-                plan: formData.plan
+                plan: formData.plan,
+                adminName: formData.adminName,
+                adminEmail: formData.adminEmail,
+                adminPassword: formData.adminPassword
             } : formData
 
             const res = await fetch(url, {
@@ -170,6 +174,28 @@ export default function SuperAdminDashboard() {
             }
         } catch (e: any) {
             toast.error('Network error while updating status')
+            console.error(e)
+        }
+    }
+
+    async function handleDelete(id: string) {
+        if (!confirm('Are you sure you want to delete this restaurant? This action cannot be undone.')) {
+            return
+        }
+
+        try {
+            const res = await fetch(`/api/superadmin/restaurants?id=${id}`, {
+                method: 'DELETE',
+            })
+            const json = await res.json()
+            if (json.success) {
+                toast.success('Restaurant deleted successfully')
+                fetchRestaurants()
+            } else {
+                toast.error(json.message || 'Failed to delete restaurant')
+            }
+        } catch (e: any) {
+            toast.error('Network error while deleting restaurant')
             console.error(e)
         }
     }
@@ -309,9 +335,35 @@ export default function SuperAdminDashboard() {
                                                             >
                                                                 <Pencil className="w-4 h-4" />
                                                             </button>
-                                                            <button className="p-2 bg-gray-900 border border-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors">
-                                                                <MoreVertical className="w-4 h-4" />
-                                                            </button>
+                                                            <div className="relative">
+                                                                <button
+                                                                    onClick={() => setOpenDropdownId(openDropdownId === res.id ? null : res.id)}
+                                                                    className="p-2 bg-gray-900 border border-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors relative z-10"
+                                                                >
+                                                                    <MoreVertical className="w-4 h-4" />
+                                                                </button>
+
+                                                                {openDropdownId === res.id && (
+                                                                    <>
+                                                                        <div
+                                                                            className="fixed inset-0 z-10"
+                                                                            onClick={() => setOpenDropdownId(null)}
+                                                                        />
+                                                                        <div className="absolute right-0 mt-2 w-48 bg-gray-950 border border-gray-800 rounded-lg shadow-xl overflow-hidden z-20">
+                                                                            <button
+                                                                                onClick={() => {
+                                                                                    setOpenDropdownId(null)
+                                                                                    handleDelete(res.id)
+                                                                                }}
+                                                                                className="w-full px-4 py-3 text-left text-sm text-red-500 hover:bg-gray-800 flex items-center gap-2 font-medium transition-colors"
+                                                                            >
+                                                                                <Trash2 className="w-4 h-4" />
+                                                                                Delete Restaurant
+                                                                            </button>
+                                                                        </div>
+                                                                    </>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -416,43 +468,43 @@ export default function SuperAdminDashboard() {
                                     </div>
                                 </div>
 
-                                {!editingId && (
-                                    <div className="space-y-4">
-                                        <h3 className="text-[10px] font-black text-blue-500 uppercase tracking-widest border-b border-blue-500/20 pb-2">Admin Account</h3>
-                                        <div>
-                                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 block">Admin Name</label>
-                                            <input
-                                                required
-                                                value={formData.adminName}
-                                                onChange={e => setFormData({ ...formData, adminName: e.target.value })}
-                                                className="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:border-blue-500/50 outline-none"
-                                                placeholder="John Doe"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 block">Admin Email</label>
-                                            <input
-                                                required
-                                                type="email"
-                                                value={formData.adminEmail}
-                                                onChange={e => setFormData({ ...formData, adminEmail: e.target.value })}
-                                                className="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:border-blue-500/50 outline-none"
-                                                placeholder="admin@restaurant.com"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 block">Admin Password</label>
-                                            <input
-                                                required
-                                                type="password"
-                                                value={formData.adminPassword}
-                                                onChange={e => setFormData({ ...formData, adminPassword: e.target.value })}
-                                                className="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:border-blue-500/50 outline-none"
-                                                placeholder="••••••••"
-                                            />
-                                        </div>
+                                <div className="space-y-4">
+                                    <h3 className="text-[10px] font-black text-blue-500 uppercase tracking-widest border-b border-blue-500/20 pb-2">Admin Account</h3>
+                                    <div>
+                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 block">Admin Name</label>
+                                        <input
+                                            required
+                                            value={formData.adminName}
+                                            onChange={e => setFormData({ ...formData, adminName: e.target.value })}
+                                            className="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:border-blue-500/50 outline-none"
+                                            placeholder="John Doe"
+                                        />
                                     </div>
-                                )}
+                                    <div>
+                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 block">Admin Email</label>
+                                        <input
+                                            required
+                                            type="email"
+                                            value={formData.adminEmail}
+                                            onChange={e => setFormData({ ...formData, adminEmail: e.target.value })}
+                                            className="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:border-blue-500/50 outline-none"
+                                            placeholder="admin@restaurant.com"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 block">
+                                            {editingId ? 'Reset Password (optional)' : 'Admin Password'}
+                                        </label>
+                                        <input
+                                            required={!editingId}
+                                            type="password"
+                                            value={formData.adminPassword}
+                                            onChange={e => setFormData({ ...formData, adminPassword: e.target.value })}
+                                            className="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:border-blue-500/50 outline-none"
+                                            placeholder={editingId ? 'Leave blank to keep current' : '••••••••'}
+                                        />
+                                    </div>
+                                </div>
                             </div>
 
                             <div className="flex items-center justify-end gap-4 pt-6 border-t border-gray-800">

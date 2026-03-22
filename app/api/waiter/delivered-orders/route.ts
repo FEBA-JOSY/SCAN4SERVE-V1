@@ -1,29 +1,42 @@
 import { prisma } from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
 
-// GET /api/manager/orders?restaurantId=xxx
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const restaurantId = searchParams.get('restaurantId')
+    const date = searchParams.get('date') // YYYY-MM-DD format
 
     if (!restaurantId) {
         return NextResponse.json({ success: false, message: 'restaurantId required' }, { status: 400 })
     }
 
-    const startDate = searchParams.get('startDate')
-    const endDate = searchParams.get('endDate')
-
     try {
-        const where: any = { restaurantId }
-        if (startDate && endDate) {
-            where.createdAt = {
-                gte: new Date(startDate),
-                lte: new Date(endDate)
+        let dateFilter = {}
+        if (date) {
+            const startDate = new Date(date)
+            // Start of day
+            startDate.setHours(0, 0, 0, 0)
+            
+            const endDate = new Date(startDate)
+            // End of day
+            endDate.setDate(endDate.getDate() + 1)
+            
+            dateFilter = {
+                createdAt: {
+                    gte: startDate,
+                    lt: endDate
+                }
             }
         }
 
         const orders = await prisma.order.findMany({
-            where,
+            where: { 
+                restaurantId,
+                status: {
+                    in: ['served', 'completed']
+                },
+                ...dateFilter
+            },
             select: {
                 id: true,
                 tableId: true,
@@ -40,8 +53,7 @@ export async function GET(req: NextRequest) {
             },
             orderBy: {
                 createdAt: 'desc'
-            },
-            take: startDate && endDate ? undefined : 100 
+            }
         })
 
         const formattedOrders = orders.map((order: any) => ({
@@ -56,9 +68,9 @@ export async function GET(req: NextRequest) {
 
         return NextResponse.json({ success: true, data: formattedOrders })
     } catch (error) {
-        console.error('Error fetching orders:', error)
+        console.error('Error fetching delivered orders:', error)
         return NextResponse.json(
-            { success: false, message: 'Failed to fetch orders' },
+            { success: false, message: 'Failed to fetch delivered orders' },
             { status: 500 }
         )
     }

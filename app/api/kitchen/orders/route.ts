@@ -5,22 +5,40 @@ import { NextRequest, NextResponse } from 'next/server'
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const restaurantId = searchParams.get('restaurantId')
+    const statusParam = searchParams.get('status')
+    const dateParam = searchParams.get('date')
 
     if (!restaurantId) {
         return NextResponse.json({ success: false, message: 'restaurantId required' }, { status: 400 })
     }
 
     try {
+        let whereClause: any = { restaurantId }
+        
+        if (statusParam === 'history') {
+            whereClause.status = { in: ['ready', 'served', 'completed'] }
+            if (dateParam) {
+                const startDate = new Date(dateParam)
+                startDate.setHours(0, 0, 0, 0)
+                const endDate = new Date(dateParam)
+                endDate.setHours(23, 59, 59, 999)
+                whereClause.createdAt = {
+                    gte: startDate,
+                    lte: endDate
+                }
+            }
+        } else {
+            whereClause.status = { in: ['placed', 'accepted', 'preparing'] }
+        }
+
+        const orderByClause: any = statusParam === 'history'
+            ? [{ createdAt: 'desc' }]
+            : [{ priority: 'desc' }, { createdAt: 'asc' }]
+
         const orders = await prisma.order.findMany({
-            where: {
-                restaurantId,
-                status: { in: ['placed', 'accepted', 'preparing'] }
-            },
+            where: whereClause,
             include: { table: { select: { tableNumber: true } } },
-            orderBy: [
-                { priority: 'desc' },
-                { createdAt: 'asc' }
-            ]
+            orderBy: orderByClause
         })
         return NextResponse.json({ success: true, data: orders })
     } catch (error: any) {
