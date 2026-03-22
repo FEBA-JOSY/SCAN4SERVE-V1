@@ -47,8 +47,10 @@ export default function LoginPage() {
 
             const userData = resultData.data
 
-            toast.success(`Welcome back! Redirecting to your dashboard...`)
-            router.push(ROLE_REDIRECT[userData.role] ?? '/')
+            toast.success(`Welcome back! Redirecting...`)
+            setTimeout(() => {
+                window.location.href = ROLE_REDIRECT[userData.role.toLowerCase()] || '/'
+            }, 500)
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Login failed'
             toast.error(msg)

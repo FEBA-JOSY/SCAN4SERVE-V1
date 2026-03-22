@@ -134,7 +134,7 @@ export default function AdminDashboard() {
                                 <div className="px-8 pb-8 -mt-12 flex flex-col md:flex-row items-center md:items-end gap-6">
                                     <div className="w-32 h-32 bg-gray-950 border-4 border-gray-900 rounded-3xl overflow-hidden shadow-2xl relative group">
                                         {restaurantForm?.logoUrl || profile?.restaurant?.logoUrl ? (
-                                            <img src={restaurantForm.logoUrl || profile.restaurant.logoUrl} className="w-full h-full object-cover" alt="" />
+                                            <img src={restaurantForm?.logoUrl || profile?.restaurant?.logoUrl} className="w-full h-full object-cover" alt="" />
                                         ) : (
                                             <div className="w-full h-full flex items-center justify-center text-gray-800 bg-gray-900">
                                                 <Camera className="w-10 h-10" />
@@ -166,7 +166,7 @@ export default function AdminDashboard() {
                                     </div>
                                     <div className="flex-1 text-center md:text-left">
                                         <h3 className="text-2xl font-black text-white flex items-center justify-center md:justify-start gap-2">
-                                            {profile?.restaurants?.name}
+                                            {profile?.restaurant?.name}
                                             <BadgeCheck className="w-6 h-6 text-blue-500" />
                                         </h3>
                                         <p className="text-gray-500 text-sm font-medium mt-1">Admin Dashboard • Since 2024</p>
