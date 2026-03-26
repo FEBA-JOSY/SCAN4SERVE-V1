@@ -27,46 +27,57 @@ export default function LoginPage() {
         setLoading(true)
 
         try {
+            console.log('--- Client-side Login Debug ---')
             const result = await signIn('credentials', {
                 email,
                 password,
                 redirect: false,
             })
+            console.log('signIn result:', result)
 
             if (result?.error) {
+                console.error('signIn error:', result.error)
                 throw new Error(result.error)
             }
 
             if (!result?.ok) {
+                console.error('signIn failed (not ok)')
                 throw new Error('Authentication failed')
             }
 
             // Fetch user data to get the role for redirection
-            // We use { cache: 'no-store' } to ensure we get the latest session data on Vercel
+            console.log('Fetching user data from /api/auth/me...')
             const response = await fetch('/api/auth/me', { cache: 'no-store' })
+            console.log('Fetch response status:', response.status)
+            
             const resultData = await response.json()
+            console.log('/api/auth/me response data:', resultData)
 
             if (!resultData.success || !resultData.data) {
+                console.error('Failed to get user data from /api/auth/me')
                 throw new Error(resultData.message || 'Failed to fetch user data')
             }
 
             const userData = resultData.data
             const role = userData.role?.toLowerCase()
             const targetPath = ROLE_REDIRECT[role] || '/'
+            
+            console.log('User role:', role)
+            console.log('Redirecting to:', targetPath)
 
             toast.success(`Welcome back! Redirecting...`)
             
-            // For Vercel, it's often better to use router.push + refresh 
-            // to ensure the session is properly recognized after the client navigation
+            // For Vercel, using window.location.href ensures a fresh session 
+            // is visible to the server on the first request of the destination page.
             setTimeout(() => {
-                router.push(targetPath)
-                router.refresh()
-            }, 500)
+                console.log('Triggering navigation to:', targetPath)
+                window.location.href = targetPath
+            }, 800)
             
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Login failed'
             toast.error(msg)
-            console.error('Login error:', err)
+            console.error('CRITICAL Login error:', err)
         } finally {
             setLoading(false)
         }
