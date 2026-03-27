@@ -1,20 +1,29 @@
-const WebSocket = require('ws');
-const port = process.env.PORT || 8080;
-const wss = new WebSocket.Server({ port });
+const WebSocket = require("ws");
 
-console.log(`WebSocket Server running on port ${port}`);
+const wss = new WebSocket.Server({ port: 8080 });
 
-wss.on('connection', function connection(ws, req) {
-    console.log("✅ New client connected from:", req.socket.remoteAddress);
+console.log("🚀 WebSocket Server running on ws://0.0.0.0:8080");
 
-    ws.on('message', function incoming(message) {
-        console.log("📩 Received:", message.toString());
+wss.on("connection", (ws) => {
+  console.log("✅ Client connected");
 
-        // broadcast to all clients (ESP32 + web)
-        wss.clients.forEach(client => {
-            if (client.readyState === WebSocket.OPEN) {
-                client.send(message.toString());
-            }
-        });
-    });
+  ws.on("message", (msg) => {
+    try {
+      const data = JSON.parse(msg.toString());
+      console.log("📩 Incoming:", data);
+
+      // Broadcast to ALL (ESP + kitchen + waiter)
+      wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify(data));
+        }
+      });
+    } catch (e) {
+      console.error("Invalid JSON received");
+    }
+  });
+
+  ws.on("close", () => {
+    console.log("❌ Client disconnected");
+  });
 });

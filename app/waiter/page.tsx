@@ -50,7 +50,11 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
         socket.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
-                if (data.type === "ORDER_PLACED") {
+                if (data.type === "STATUS") {
+                    console.log(`Table Status Update: ${data.tableId} -> ${data.status}`);
+                    fetchTables(profile?.restaurantId);
+                }
+                if (data.type === "ORDER") {
                     console.log("New order detected via WS, refreshing tables...");
                     fetchTables(profile?.restaurantId);
                 }

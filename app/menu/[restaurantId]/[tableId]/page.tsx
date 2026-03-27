@@ -112,19 +112,21 @@ export default function CustomerMenuPage() {
         socket.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
-                if (data.type === "STATUS_UPDATED") {
+                console.log("📩 Received from WS:", data);
+
+                if (data.type === "STATUS") {
                     setActiveOrder(prev => {
-                        if (prev && prev.id === data.orderId) {
-                            console.log("Order status updated via WS:", data.status);
-                            if (data.status === 'ready') toast.success('Your order is ready! 🍲');
-                            if (data.status === 'served') toast.success('Order served. Enjoy your meal! ✨');
-                            return { ...prev, status: data.status };
+                        // Cast to String to ensure "1" matches 1
+                        if (prev && String(prev.tableId) === String(data.tableId)) {
+                            console.log("🎯 Status Match! New status:", data.status);
+                            if (data.status === 'READY') toast.success('Your order is ready! 🍲');
+                            return { ...prev, status: data.status.toLowerCase() };
                         }
                         return prev;
                     });
                 }
             } catch (e) {
-                console.error("WS message error", e);
+                console.error("❌ WS message error", e);
             }
         };
 
@@ -169,13 +171,16 @@ export default function CustomerMenuPage() {
                 // Send to ESP32 via WebSocket
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     const wsPayload = {
-                        type: "ORDER_PLACED",
-                        table_id: tableId,
+                        type: "ORDER",
+                        restaurantId,
+                        tableId,
                         items: cartItems.map(i => ({
                             name: i.item.name,
-                            quantity: i.quantity
+                            qty: i.quantity,
+                            price: i.item.price
                         })),
-                        total: cartTotal + 5 // totalAmount including fee
+                        total: cartTotal + 5,
+                        status: "PLACED"
                     };
                     ws.send(JSON.stringify(wsPayload));
                 }
@@ -497,7 +502,7 @@ export default function CustomerMenuPage() {
 }
 
 function OrderTrackingView({ order, onBackToMenu }: { order: Order; onBackToMenu: () => void }) {
-    const [status, setStatus] = useState(order.status)
+    const status = order.status
     const [estimatedTime, setEstimatedTime] = useState(order.estimatedTimeMinutes)
 
     useEffect(() => {
@@ -508,7 +513,8 @@ function OrderTrackingView({ order, onBackToMenu }: { order: Order; onBackToMenu
                 const json = await res.json()
                 if (json.success) {
                     if (json.data.status !== status) {
-                        setStatus(json.data.status)
+                        // The parent's setActiveOrder will update the prop on the next render
+                        // This polling is a backup for when WS fails
                         if (json.data.status === 'ready') toast.success('Your order is ready! 🍲')
                         if (json.data.status === 'served') toast.success('Order served. Enjoy your meal! ✨')
                     }

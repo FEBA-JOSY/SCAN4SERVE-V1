@@ -60,8 +60,8 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
         socket.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
-                if (data.type === "ORDER_PLACED") {
-                    console.log("New order detected via WS, alerting...");
+                if (data.type === "ORDER") {
+                    console.log("New order detected via WS:", data);
                     handleNewOrder(data as any); 
                     fetchOrders();
                 }
@@ -139,12 +139,18 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
             })
             const json = await res.json()
             if (json.success) {
-                toast.success(`Order marked as ${status}`)
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ type: "STATUS_UPDATED", orderId, status }));
+                    toast.success(`Order marked as ${status}`)
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        const wsPayload = { 
+                            type: "STATUS", 
+                            tableId: String(json.data.tableId), 
+                            status: status.toUpperCase() 
+                        };
+                        console.log("🚀 Sending Status Update via WS:", wsPayload);
+                        ws.send(JSON.stringify(wsPayload));
+                    }
+                    fetchOrders()
                 }
-                fetchOrders()
-            }
         } catch (error) {
             toast.error('Update failed')
         }
