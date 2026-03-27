@@ -31,14 +31,44 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
     useEffect(() => {
         fetchProfile()
 
-        // Real-time updates disabled, using polling
+        // --- WebSocket Real-time Updates ---
+        const wsUrl = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080";
+        const socket = new WebSocket(wsUrl);
+
+        socket.onopen = () => {
+            console.log("✅ Waiter WS Connected");
+        };
+
+        socket.onclose = () => {
+            console.log("❌ Waiter WS Disconnected");
+        };
+
+        socket.onerror = (err) => {
+            console.log("⚠️ Waiter WS Error:", err);
+        };
+
+        socket.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === "ORDER_PLACED") {
+                    console.log("New order detected via WS, refreshing tables...");
+                    fetchTables(profile?.restaurantId);
+                }
+            } catch (e) {
+                console.error("WS message error", e);
+            }
+        };
+
         const interval = setInterval(() => {
             if (profile?.restaurantId) {
                 fetchTables(profile.restaurantId)
             }
-        }, 5000)
+        }, 30000)
 
-        return () => clearInterval(interval)
+        return () => {
+            socket.close();
+            clearInterval(interval);
+        }
     }, [profile?.restaurantId])
 
     async function fetchProfile() {

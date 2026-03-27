@@ -94,35 +94,72 @@ export default function CustomerMenuPage() {
     const cartTotal = cartItems.reduce((sum, { item, quantity }) => sum + item.price * quantity, 0)
     const cartCount = cartItems.reduce((sum, { quantity }) => sum + quantity, 0)
 
+    // --- WebSocket Logic ---
+    const [ws, setWs] = useState<WebSocket | null>(null)
+
+    useEffect(() => {
+        const wsUrl = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080";
+        const socket = new WebSocket(wsUrl);
+
+        socket.onopen = () => {
+            console.log("✅ WebSocket Connected to server");
+        };
+
+        socket.onclose = () => {
+            console.log("❌ WebSocket Disconnected from server");
+        };
+
+        socket.onerror = (err) => {
+            console.log("⚠️ WebSocket Error:", err);
+        };
+
+        setWs(socket);
+
+        return () => {
+            socket.close();
+        };
+    }, []);
+
     async function handlePlaceOrder() {
         if (cartItems.length === 0) return
         setPlacingOrder(true)
+
+        const orderData = {
+            restaurant_id: restaurantId,
+            table_id: tableId,
+            items: cartItems.map(({ item, quantity, notes }) => ({
+                menu_item_id: item.id,
+                name: item.name,
+                price: item.price,
+                quantity,
+                special_instructions: notes,
+            })),
+            special_instructions: '',
+        };
 
         try {
             const res = await fetch('/api/customer/orders', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    restaurant_id: restaurantId,
-                    table_id: tableId,
-                    items: cartItems.map(({ item, quantity, notes }) => ({
-                        menu_item_id: item.id,
-                        name: item.name,
-                        price: item.price,
-                        quantity,
-                        special_instructions: notes,
-                    })),
-                    special_instructions: '', // Global notes could be added here
-                }),
+                body: JSON.stringify(orderData),
             })
 
             const json = await res.json()
-            console.log('Full order response:', json)
-            console.log('Response data:', json.data)
-            console.log('Response data type:', typeof json.data)
-            console.log('Response data keys:', json.data ? Object.keys(json.data) : 'null')
             
             if (json.success && json.data) {
+                // Send to ESP32 via WebSocket
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    const wsPayload = {
+                        type: "ORDER_PLACED",
+                        items: cartItems.map(i => ({
+                            name: i.item.name,
+                            quantity: i.quantity
+                        })),
+                        total: cartTotal + 5 // totalAmount including fee
+                    };
+                    ws.send(JSON.stringify(wsPayload));
+                }
+
                 setActiveOrder(json.data)
                 setCart({})
                 setShowCart(false)

@@ -15,17 +15,26 @@ export default withAuth(
         const token = req.nextauth.token
         const pathname = req.nextUrl.pathname
 
+        console.log('--- Middleware Debug ---')
+        console.log('Path:', pathname)
+        console.log('Token exists:', !!token)
+        console.log('User Role in Token:', token?.role)
+
         // Already checked authentication via withAuth wrapper
         // Now check role-based access
         const routeEntry = Object.entries(ROLE_ROUTES).find(([route]) =>
             pathname.startsWith(route)
         )
 
-        if (routeEntry) {
+        if (token && routeEntry) {
             const [, allowedRoles] = routeEntry
-            const userRole = token?.role as UserRole
+            const userRole = (token?.role as string)?.toLowerCase() as UserRole
+
+            console.log('Allowed Roles for this route:', allowedRoles)
+            console.log('Normalized User Role:', userRole)
 
             if (!userRole || !allowedRoles.includes(userRole)) {
+                console.log('⛔ Unauthorized: Redirecting back to login')
                 return NextResponse.redirect(new URL('/login?error=unauthorized', req.url))
             }
         }

@@ -767,8 +767,42 @@ function OrdersTab({ restaurantId }: { restaurantId?: string }) {
 
     useEffect(() => {
         if (restaurantId) fetchOrders()
-        const interval = setInterval(() => fetchOrders(), 10000) // Refresh every 10 seconds
-        return () => clearInterval(interval)
+        
+        // --- WebSocket Real-time Updates ---
+        const wsUrl = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080";
+        const socket = new WebSocket(wsUrl);
+
+        socket.onopen = () => {
+            console.log("✅ Manager WS Connected");
+        };
+
+        socket.onclose = () => {
+            console.log("❌ Manager WS Disconnected");
+        };
+
+        socket.onerror = (err) => {
+            console.log("⚠️ Manager WS Error:", err);
+        };
+
+        socket.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === "ORDER_PLACED") {
+                    console.log("New order detected via WS, refetching...");
+                    fetchOrders();
+                }
+            } catch (e) {
+                console.error("WS message error", e);
+            }
+        };
+
+        // Still keep a longer polling interval as a fallback
+        const interval = setInterval(() => fetchOrders(), 30000) 
+        
+        return () => {
+            socket.close();
+            clearInterval(interval);
+        }
     }, [restaurantId, fetchOrders])
 
     const updateOrderStatus = useCallback(async (orderId: string, newStatus: string) => {

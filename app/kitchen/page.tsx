@@ -40,13 +40,45 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
         // Initialize notification sound
         audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3')
 
+        // --- WebSocket Real-time Updates ---
+        const wsUrl = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080";
+        const socket = new WebSocket(wsUrl);
+
+        socket.onopen = () => {
+            console.log("✅ Kitchen WS Connected");
+        };
+
+        socket.onclose = () => {
+            console.log("❌ Kitchen WS Disconnected");
+        };
+
+        socket.onerror = (err) => {
+            console.log("⚠️ Kitchen WS Error:", err);
+        };
+
+        socket.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === "ORDER_PLACED") {
+                    console.log("New order detected via WS, alerting...");
+                    handleNewOrder(data as any); 
+                    fetchOrders();
+                }
+            } catch (e) {
+                console.error("WS message error", e);
+            }
+        };
+
         // Realtime disabled after migration from Supabase
         // Will be replaced with polling or Pusher/Ably if needed
         const interval = setInterval(() => {
             if (profile?.restaurantId) fetchOrders(profile.restaurantId)
-        }, 5000)
+        }, 30000)
 
-        return () => clearInterval(interval)
+        return () => {
+            socket.close();
+            clearInterval(interval);
+        }
     }, [profile?.restaurantId])
 
     async function fetchProfile() {
