@@ -25,6 +25,7 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
     const [soundEnabled, setSoundEnabled] = useState(true)
     const [searchQuery, setSearchQuery] = useState('')
     const [activeTab, setActiveTab] = useState<KitchenTab>(initialTab)
+    const [ws, setWs] = useState<WebSocket | null>(null)
     const audioRef = useRef<HTMLAudioElement | null>(null)
     const router = useRouter()
     const pathname = usePathname()
@@ -68,6 +69,8 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
                 console.error("WS message error", e);
             }
         };
+
+        setWs(socket);
 
         // Realtime disabled after migration from Supabase
         // Will be replaced with polling or Pusher/Ably if needed
@@ -137,6 +140,9 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
             const json = await res.json()
             if (json.success) {
                 toast.success(`Order marked as ${status}`)
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: "STATUS_UPDATED", orderId, status }));
+                }
                 fetchOrders()
             }
         } catch (error) {

@@ -109,6 +109,25 @@ export default function CustomerMenuPage() {
             console.log("❌ WebSocket Disconnected from server");
         };
 
+        socket.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === "STATUS_UPDATED") {
+                    setActiveOrder(prev => {
+                        if (prev && prev.id === data.orderId) {
+                            console.log("Order status updated via WS:", data.status);
+                            if (data.status === 'ready') toast.success('Your order is ready! 🍲');
+                            if (data.status === 'served') toast.success('Order served. Enjoy your meal! ✨');
+                            return { ...prev, status: data.status };
+                        }
+                        return prev;
+                    });
+                }
+            } catch (e) {
+                console.error("WS message error", e);
+            }
+        };
+
         socket.onerror = (err) => {
             console.log("⚠️ WebSocket Error:", err);
         };
@@ -151,6 +170,7 @@ export default function CustomerMenuPage() {
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     const wsPayload = {
                         type: "ORDER_PLACED",
+                        table_id: tableId,
                         items: cartItems.map(i => ({
                             name: i.item.name,
                             quantity: i.quantity
