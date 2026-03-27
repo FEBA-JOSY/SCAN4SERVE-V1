@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { signIn } from 'next-auth/react'
+import { signIn, getSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { UtensilsCrossed, Eye, EyeOff, Loader2 } from 'lucide-react'
@@ -45,21 +45,17 @@ export default function LoginPage() {
                 throw new Error('Authentication failed')
             }
 
-            // Fetch user data to get the role for redirection
-            console.log('Fetching user data from /api/auth/me...')
-            const response = await fetch('/api/auth/me', { cache: 'no-store' })
-            console.log('Fetch response status:', response.status)
-            
-            const resultData = await response.json()
-            console.log('/api/auth/me response data:', resultData)
+            // Fetch user data using next-auth getSession (reliable after signIn)
+            console.log('Fetching session data...')
+            const session = await getSession()
+            console.log('Session data:', session)
 
-            if (!resultData.success || !resultData.data) {
-                console.error('Failed to get user data from /api/auth/me')
-                throw new Error(resultData.message || 'Failed to fetch user data')
+            if (!session || !session.user) {
+                console.error('Failed to get user session data')
+                throw new Error('Failed to fetch user data')
             }
 
-            const userData = resultData.data
-            const role = userData.role?.toLowerCase()
+            const role = (session.user as any).role?.toLowerCase()
             const targetPath = ROLE_REDIRECT[role] || '/'
             
             console.log('User role:', role)

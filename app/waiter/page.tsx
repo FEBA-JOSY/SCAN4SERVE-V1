@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { cn, formatCurrency, formatTime } from '@/lib/utils'
 import type { User, Restaurant, Table, Order } from '@/types'
-import { io, Socket } from 'socket.io-client'
+import mqtt from 'mqtt'
 
 type WaiterTab = 'tables' | 'notifications'
 
@@ -32,31 +32,35 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
     useEffect(() => {
         fetchProfile()
 
-        // --- WebSocket Real-time Updates ---
-        const wsUrl = process.env.NEXT_PUBLIC_WS_URL?.replace("ws://", "http://").replace("wss://", "https://") || "http://localhost:8080";
-        const socket = io(wsUrl);
+        // --- MQTT Real-time Updates ---
+        const client = mqtt.connect('wss://y12dbb61.ala.asia-southeast1.emqxsl.com:8084/mqtt', {
+            username: 'table_T01',
+            password: 'scan4serve',
+            clientId: 'waiter_' + Math.random().toString(16).substring(2, 10)
+        });
 
-        socket.on("connect", () => {
-             console.log("✅ Waiter WS Connected");
+        client.on('connect', () => {
+            console.log("✅ Waiter MQTT Connected");
+            client.subscribe('restaurant/snmimt/#');
         });
-        socket.on("disconnect", () => {
-             console.log("❌ Waiter WS Disconnected");
+
+        client.on('error', (err) => {
+            console.log("⚠️ Waiter MQTT Error:", err);
         });
-        socket.on("connect_error", (err) => {
-             console.log("⚠️ Waiter WS Error:", err);
-        });
-        socket.on("notification", (data) => {
+
+        client.on('message', (topic, message) => {
             try {
+                const data = JSON.parse(message.toString());
                 if (data.type === "STATUS") {
                     console.log(`Table Status Update: ${data.tableId} -> ${data.status}`);
                     fetchTables(profile?.restaurantId);
                 }
                 if (data.type === "ORDER") {
-                    console.log("New order detected via WS, refreshing tables...");
+                    console.log("New order detected via MQTT, refreshing tables...");
                     fetchTables(profile?.restaurantId);
                 }
             } catch (e) {
-                console.error("WS message error", e);
+                console.error("MQTT parse error", e);
             }
         });
 
@@ -67,7 +71,7 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
         }, 30000)
 
         return () => {
-            socket.disconnect();
+            client.end();
             clearInterval(interval);
         }
     }, [profile?.restaurantId])

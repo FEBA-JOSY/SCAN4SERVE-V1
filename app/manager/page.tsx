@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 import { cn, formatCurrency } from '@/lib/utils'
 import type { User, MenuItem, Category, Table } from '@/types'
-import { io, Socket } from 'socket.io-client'
+import mqtt from 'mqtt'
 
 type ManagerTab = 'overview' | 'menu' | 'tables' | 'staff' | 'orders' | 'reports'
 
@@ -769,27 +769,31 @@ function OrdersTab({ restaurantId }: { restaurantId?: string }) {
     useEffect(() => {
         if (restaurantId) fetchOrders()
         
-        // --- WebSocket Real-time Updates ---
-        const wsUrl = process.env.NEXT_PUBLIC_WS_URL?.replace("ws://", "http://").replace("wss://", "https://") || "http://localhost:8080";
-        const socket = io(wsUrl);
+        // --- MQTT Real-time Updates ---
+        const client = mqtt.connect('wss://y12dbb61.ala.asia-southeast1.emqxsl.com:8084/mqtt', {
+            username: 'table_T01',
+            password: 'scan4serve',
+            clientId: 'manager_' + Math.random().toString(16).substring(2, 10)
+        });
 
-        socket.on("connect", () => {
-             console.log("✅ Manager WS Connected");
+        client.on('connect', () => {
+            console.log("✅ Manager MQTT Connected");
+            client.subscribe('restaurant/snmimt/#');
         });
-        socket.on("disconnect", () => {
-             console.log("❌ Manager WS Disconnected");
+
+        client.on('error', (err) => {
+            console.log("⚠️ Manager MQTT Error:", err);
         });
-        socket.on("connect_error", (err) => {
-             console.log("⚠️ Manager WS Error:", err);
-        });
-        socket.on("notification", (data) => {
+
+        client.on('message', (topic, message) => {
             try {
-                if (data.type === "ORDER_PLACED") {
-                    console.log("New order detected via WS, refetching...");
+                const data = JSON.parse(message.toString());
+                if (data.type === "ORDER_PLACED" || data.type === "ORDER") {
+                    console.log("New order detected via MQTT, refetching...");
                     fetchOrders();
                 }
             } catch (e) {
-                console.error("WS message error", e);
+                console.error("MQTT parse error", e);
             }
         });
 
@@ -797,7 +801,7 @@ function OrdersTab({ restaurantId }: { restaurantId?: string }) {
         const interval = setInterval(() => fetchOrders(), 30000) 
         
         return () => {
-            socket.close();
+            client.end();
             clearInterval(interval);
         }
     }, [restaurantId, fetchOrders])

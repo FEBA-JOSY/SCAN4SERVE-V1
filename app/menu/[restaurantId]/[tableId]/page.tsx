@@ -11,7 +11,7 @@ import {
 import { cn, formatCurrency } from '@/lib/utils'
 import Image from 'next/image'
 import type { Restaurant, Category, MenuItem, Order } from '@/types'
-import { io, Socket } from 'socket.io-client'
+import mqtt from 'mqtt'
 
 export default function CustomerMenuPage() {
     const params = useParams()
@@ -95,29 +95,32 @@ export default function CustomerMenuPage() {
     const cartTotal = cartItems.reduce((sum, { item, quantity }) => sum + item.price * quantity, 0)
     const cartCount = cartItems.reduce((sum, { quantity }) => sum + quantity, 0)
 
-    // --- WebSocket Logic ---
-    const [ws, setWs] = useState<Socket | null>(null)
+    // --- MQTT Logic ---
+    const [mqttClient, setMqttClient] = useState<mqtt.MqttClient | null>(null)
 
     useEffect(() => {
-        const wsUrl = process.env.NEXT_PUBLIC_WS_URL?.replace("ws://", "http://").replace("wss://", "https://") || "http://localhost:8080";
-        const socket = io(wsUrl);
+        const client = mqtt.connect('wss://y12dbb61.ala.asia-southeast1.emqxsl.com:8084/mqtt', {
+            username: 'table_T01',
+            password: 'scan4serve',
+            clientId: 'customer_' + Math.random().toString(16).substring(2, 10)
+        });
 
-        socket.on("connect", () => {
-             console.log("✅ WebSocket Connected to server");
+        client.on('connect', () => {
+            console.log("✅ Menu MQTT Connected");
+            client.subscribe('restaurant/snmimt/#');
         });
-        socket.on("disconnect", () => {
-             console.log("❌ WebSocket Disconnected from server");
+
+        client.on('error', (err) => {
+            console.log("⚠️ Menu MQTT Error:", err);
         });
-        socket.on("connect_error", (err) => {
-             console.log("⚠️ WebSocket Error:", err);
-        });
-        socket.on("notification", (data) => {
+
+        client.on('message', (topic, message) => {
             try {
-                console.log("📩 Received from WS:", data);
+                const data = JSON.parse(message.toString());
+                console.log("📩 Received from MQTT:", data);
 
                 if (data.type === "STATUS") {
                     setActiveOrder(prev => {
-                        // Cast to String to ensure "1" matches 1
                         if (prev && String(prev.tableId) === String(data.tableId)) {
                             console.log("🎯 Status Match! New status:", data.status);
                             if (data.status === 'READY') toast.success('Your order is ready! 🍲');
@@ -127,14 +130,14 @@ export default function CustomerMenuPage() {
                     });
                 }
             } catch (e) {
-                console.error("❌ WS message error", e);
+                console.error("❌ MQTT parse error", e);
             }
         });
         
-        setWs(socket);
+        setMqttClient(client);
 
         return () => {
-            socket.disconnect();
+            client.end();
         };
     }, []);
 
@@ -165,8 +168,8 @@ export default function CustomerMenuPage() {
             const json = await res.json()
             
             if (json.success && json.data) {
-                // Send to ESP32 via WebSocket
-                if (ws && ws.connected) {
+                // Send to ESP32 / Kitchen via MQTT
+                if (mqttClient && mqttClient.connected) {
                     const wsPayload = {
                         type: "ORDER",
                         restaurantId,
@@ -179,7 +182,7 @@ export default function CustomerMenuPage() {
                         total: cartTotal + 5,
                         status: "PLACED"
                     };
-                    ws.emit("message", wsPayload);
+                    mqttClient.publish(`restaurant/snmimt/table/${tableId || "T01"}`, JSON.stringify(wsPayload));
                 }
 
                 setActiveOrder(json.data)

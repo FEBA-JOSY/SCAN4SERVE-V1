@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { cn, formatCurrency, formatTime, minutesAgo } from '@/lib/utils'
 import type { Order, User, Restaurant } from '@/types'
-import { io, Socket } from 'socket.io-client'
+import mqtt from 'mqtt'
 
 type KitchenTab = 'orders' | 'notifications' | 'history'
 
@@ -26,7 +26,7 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
     const [soundEnabled, setSoundEnabled] = useState(true)
     const [searchQuery, setSearchQuery] = useState('')
     const [activeTab, setActiveTab] = useState<KitchenTab>(initialTab)
-    const [ws, setWs] = useState<Socket | null>(null)
+    const [mqttClient, setMqttClient] = useState<mqtt.MqttClient | null>(null)
     const audioRef = useRef<HTMLAudioElement | null>(null)
     const router = useRouter()
     const pathname = usePathname()
@@ -42,32 +42,36 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
         // Initialize notification sound
         audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3')
 
-        // --- WebSocket Real-time Updates ---
-        const wsUrl = process.env.NEXT_PUBLIC_WS_URL?.replace("ws://", "http://").replace("wss://", "https://") || "http://localhost:8080";
-        const socket = io(wsUrl);
+        // --- MQTT Real-time Updates ---
+        const client = mqtt.connect('wss://y12dbb61.ala.asia-southeast1.emqxsl.com:8084/mqtt', {
+            username: 'table_T01',
+            password: 'scan4serve',
+            clientId: 'kitchen_' + Math.random().toString(16).substring(2, 10)
+        });
 
-        socket.on("connect", () => {
-             console.log("✅ Kitchen WS Connected");
+        client.on('connect', () => {
+            console.log("✅ Kitchen MQTT Connected");
+            client.subscribe('restaurant/snmimt/#');
         });
-        socket.on("disconnect", () => {
-             console.log("❌ Kitchen WS Disconnected");
+
+        client.on('error', (err) => {
+            console.log("⚠️ Kitchen MQTT Error:", err);
         });
-        socket.on("connect_error", (err) => {
-             console.log("⚠️ Kitchen WS Error:", err);
-        });
-        socket.on("notification", (data) => {
+
+        client.on('message', (topic, message) => {
             try {
+                const data = JSON.parse(message.toString());
                 if (data.type === "ORDER") {
-                    console.log("New order detected via WS:", data);
+                    console.log("New order detected via MQTT:", data);
                     handleNewOrder(data as any);
                     fetchOrders();
                 }
             } catch (e) {
-                console.error("WS message error", e);
+                console.error("MQTT message error", e);
             }
         });
         
-        setWs(socket);
+        setMqttClient(client);
 
         // Realtime disabled after migration from Supabase
         // Will be replaced with polling or Pusher/Ably if needed
@@ -76,7 +80,7 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
         }, 30000)
 
         return () => {
-            socket.close();
+            client.end();
             clearInterval(interval);
         }
     }, [profile?.restaurantId])
@@ -137,14 +141,14 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
             const json = await res.json()
             if (json.success) {
                     toast.success(`Order marked as ${status}`)
-                    if (ws && ws.connected) {
+                    if (mqttClient && mqttClient.connected) {
                         const wsPayload = { 
                             type: "STATUS", 
                             tableId: String(json.data.tableId), 
                             status: status.toUpperCase() 
                         };
-                        console.log("🚀 Sending Status Update via WS:", wsPayload);
-                        ws.emit("message", wsPayload);
+                        console.log("🚀 Sending Status Update via MQTT:", wsPayload);
+                        mqttClient.publish("restaurant/snmimt/status", JSON.stringify(wsPayload));
                     }
                     fetchOrders()
                 }
