@@ -5,6 +5,16 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
+/*
+  =========================================
+  HARDWARE CONNECTIONS (I2C):
+  - SSD1306 SDA -> ESP32 GPIO 21
+  - SSD1306 SCL -> ESP32 GPIO 22
+  - SSD1306 VCC -> 3.3V
+  - SSD1306 GND -> GND
+  =========================================
+*/
+
 //////////////// WIFI //////////////////
 const char* ssid = "Gojo";
 const char* password = "gojo5710";
@@ -27,13 +37,31 @@ int totalItems = 0;
 int totalAmount = 0;
 
 ////////////////////////////////////////////////////
+// INTRO SCREEN
+////////////////////////////////////////////////////
+void showIntro() {
+  display.clearDisplay();
+
+  display.setTextSize(2);
+  display.setCursor(10, 10);
+  display.println("Scan4Serve");
+
+  display.setTextSize(1);
+  display.setCursor(20, 40);
+  display.println("Smart Dining");
+
+  display.display();
+  delay(2000);
+}
+
+////////////////////////////////////////////////////
 // DISPLAY ORDER
 ////////////////////////////////////////////////////
 void showOrder() {
   display.clearDisplay();
   display.setTextSize(1);
   display.setCursor(0, 0);
-  display.println("New Order");
+  display.println("New Order Received");
   display.println("----------------");
 
   int y = 16;
@@ -41,6 +69,8 @@ void showOrder() {
     display.setCursor(0, y);
     display.println(lines[i]);
     y += 12;
+    // Prevent drawing past screen
+    if (y >= 54) break; 
   }
 
   display.setCursor(0, 54);
@@ -51,12 +81,23 @@ void showOrder() {
 }
 
 ////////////////////////////////////////////////////
-// DISPLAY STATUS
+// DISPLAY STATUS (KITCHEN / WAITER UPDATES)
 ////////////////////////////////////////////////////
-void showStatus(String msg) {
+void showStatus(String msg, String title = "") {
   display.clearDisplay();
-  display.setTextSize(2);
-  display.setCursor(10, 25);
+  
+  if (title != "") {
+    display.setTextSize(1);
+    display.setCursor(0, 0);
+    display.println(title);
+    display.println("----------------");
+    display.setTextSize(2);
+    display.setCursor(0, 25);
+  } else {
+    display.setTextSize(2);
+    display.setCursor(10, 25);
+  }
+  
   display.println(msg);
   display.display();
 }
@@ -70,7 +111,7 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
 
     case WStype_CONNECTED:
       Serial.println("Connected to WS");
-      showStatus("Connected");
+      showStatus("Online", "System Status");
       break;
 
     case WStype_TEXT: {
@@ -78,12 +119,17 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
       Serial.println(msg);
 
       DynamicJsonDocument doc(1024);
-      deserializeJson(doc, msg);
+      DeserializationError error = deserializeJson(doc, msg);
+      
+      if (error) {
+        Serial.println("JSON Parse Error");
+        return;
+      }
 
-      String type = doc["type"];
+      String msgType = doc["type"];
 
       ////////////////// ORDER //////////////////
-      if (type == "ORDER") {
+      if (msgType == "ORDER") {
 
         totalItems = 0;
         totalAmount = doc["total"];
@@ -91,19 +137,24 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
         JsonArray items = doc["items"];
 
         for (JsonObject item : items) {
-          String name = item["name"];
-          int qty = item["qty"];
-
-          lines[totalItems++] = name + " x" + String(qty);
+          if (totalItems < 10) {
+            String name = item["name"];
+            int qty = item["qty"];
+            lines[totalItems++] = name + " x" + String(qty);
+          }
         }
 
         showOrder();
       }
 
-      ////////////////// STATUS //////////////////
-      else if (type == "STATUS") {
+      ////////////////// ALERT / STATUS //////////////////
+      else if (msgType == "STATUS" || msgType == "ALERT") {
         String status = doc["status"];
-        showStatus(status);
+        String from = doc.containsKey("from") ? doc["from"].as<String>() : "Notification";
+        
+        // e.g. from = "Kitchen", status = "Order Ready"
+        // e.g. from = "Waiter", status = "Table 3 Needs Help"
+        showStatus(status, from);
       }
 
       break;
@@ -111,7 +162,7 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
 
     case WStype_DISCONNECTED:
       Serial.println("Disconnected");
-      showStatus("Reconnect...");
+      showStatus("Reconnect...", "System Status");
       break;
   }
 }
@@ -124,10 +175,14 @@ void setup() {
   Serial.begin(115200);
   Wire.begin(21, 22);
 
-  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    for(;;);
+  }
   display.setTextColor(WHITE);
 
-  showStatus("Booting");
+  showIntro();
+  showStatus("Booting...", "System Status");
 
   WiFi.begin(ssid, password);
 
@@ -137,7 +192,7 @@ void setup() {
   }
 
   Serial.println("WiFi Connected");
-  showStatus("WiFi OK");
+  showStatus("WiFi OK", "System Status");
 
   webSocket.begin(ws_host, ws_port, "/");
   webSocket.onEvent(webSocketEvent);
@@ -150,3 +205,4 @@ void setup() {
 void loop() {
   webSocket.loop();
 }
+

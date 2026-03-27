@@ -502,8 +502,13 @@ export default function CustomerMenuPage() {
 }
 
 function OrderTrackingView({ order, onBackToMenu }: { order: Order; onBackToMenu: () => void }) {
-    const status = order.status
+    const [currentStatus, setCurrentStatus] = useState(order.status)
     const [estimatedTime, setEstimatedTime] = useState(order.estimatedTimeMinutes)
+
+    useEffect(() => {
+        // Sync with parent prop if it changes via WS
+        setCurrentStatus(order.status);
+    }, [order.status]);
 
     useEffect(() => {
         // Polling for status changes
@@ -512,21 +517,21 @@ function OrderTrackingView({ order, onBackToMenu }: { order: Order; onBackToMenu
                 const res = await fetch(`/api/customer/orders?orderId=${order.id}`)
                 const json = await res.json()
                 if (json.success) {
-                    if (json.data.status !== status) {
-                        // The parent's setActiveOrder will update the prop on the next render
-                        // This polling is a backup for when WS fails
-                        if (json.data.status === 'ready') toast.success('Your order is ready! 🍲')
-                        if (json.data.status === 'served') toast.success('Order served. Enjoy your meal! ✨')
+                    const newStatus = json.data.status;
+                    if (newStatus !== currentStatus) {
+                        if (newStatus.toLowerCase() === 'ready' && currentStatus.toLowerCase() !== 'ready') toast.success('Your order is ready! 🍲')
+                        if (newStatus.toLowerCase() === 'served' && currentStatus.toLowerCase() !== 'served') toast.success('Order served. Enjoy your meal! ✨')
+                        setCurrentStatus(newStatus);
                     }
                     setEstimatedTime(json.data.estimatedTimeMinutes)
                 }
             } catch {
                 console.error('Error polling order status');
             }
-        }, 10000)
+        }, 5000)
 
         return () => clearInterval(interval)
-    }, [order.id, status])
+    }, [order.id, currentStatus])
 
     const steps = [
         { key: 'placed', label: 'Order Placed', time: 'Just now' },
@@ -536,7 +541,7 @@ function OrderTrackingView({ order, onBackToMenu }: { order: Order; onBackToMenu
         { key: 'served', label: 'Served', time: 'Enjoy!' },
     ]
 
-    const activeIndex = steps.findIndex(s => s.key === status)
+    const activeIndex = steps.findIndex(s => s.key === currentStatus.toLowerCase())
 
     return (
         <div className="min-h-screen bg-gray-950 p-6 flex flex-col fade-in">
