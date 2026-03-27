@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { cn, formatCurrency } from '@/lib/utils'
 import type { User, MenuItem, Category, Table } from '@/types'
+import { io, Socket } from 'socket.io-client'
 
 type ManagerTab = 'overview' | 'menu' | 'tables' | 'staff' | 'orders' | 'reports'
 
@@ -769,24 +770,20 @@ function OrdersTab({ restaurantId }: { restaurantId?: string }) {
         if (restaurantId) fetchOrders()
         
         // --- WebSocket Real-time Updates ---
-        const wsUrl = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080";
-        const socket = new WebSocket(wsUrl);
+        const wsUrl = process.env.NEXT_PUBLIC_WS_URL?.replace("ws://", "http://").replace("wss://", "https://") || "http://localhost:8080";
+        const socket = io(wsUrl);
 
-        socket.onopen = () => {
-            console.log("✅ Manager WS Connected");
-        };
-
-        socket.onclose = () => {
-            console.log("❌ Manager WS Disconnected");
-        };
-
-        socket.onerror = (err) => {
-            console.log("⚠️ Manager WS Error:", err);
-        };
-
-        socket.onmessage = (event) => {
+        socket.on("connect", () => {
+             console.log("✅ Manager WS Connected");
+        });
+        socket.on("disconnect", () => {
+             console.log("❌ Manager WS Disconnected");
+        });
+        socket.on("connect_error", (err) => {
+             console.log("⚠️ Manager WS Error:", err);
+        });
+        socket.on("notification", (data) => {
             try {
-                const data = JSON.parse(event.data);
                 if (data.type === "ORDER_PLACED") {
                     console.log("New order detected via WS, refetching...");
                     fetchOrders();
@@ -794,7 +791,7 @@ function OrdersTab({ restaurantId }: { restaurantId?: string }) {
             } catch (e) {
                 console.error("WS message error", e);
             }
-        };
+        });
 
         // Still keep a longer polling interval as a fallback
         const interval = setInterval(() => fetchOrders(), 30000) 

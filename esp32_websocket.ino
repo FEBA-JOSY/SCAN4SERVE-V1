@@ -1,5 +1,5 @@
 #include <WiFi.h>
-#include <WebSocketsClient.h>
+#include <SocketIOclient.h>
 #include <ArduinoJson.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
@@ -19,8 +19,8 @@
 const char* ssid = "Gojo";
 const char* password = "gojo5710";
 
-//////////////// WEBSOCKET //////////////////
-WebSocketsClient webSocket;
+//////////////// SOCKET.IO //////////////////
+SocketIOclient socketIO;
 
 // 👉 CHANGE THIS ONLY IF IP CHANGES
 const char* ws_host = "10.242.122.175";
@@ -103,67 +103,72 @@ void showStatus(String msg, String title = "") {
 }
 
 ////////////////////////////////////////////////////
-// WEBSOCKET EVENT
+// SOCKET.IO EVENT
 ////////////////////////////////////////////////////
-void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
+void socketIOEvent(socketIOmessageType_t type, uint8_t * payload, size_t length) {
 
   switch(type) {
 
-    case WStype_CONNECTED:
-      Serial.println("Connected to WS");
+    case sIOtype_CONNECT:
+      Serial.println("Connected to Socket.IO Server");
+      socketIO.send(sIOtype_CONNECT, "/"); // Join default namespace
       showStatus("Online", "System Status");
       break;
 
-    case WStype_TEXT: {
+    case sIOtype_DISCONNECT:
+      Serial.println("Socket.IO Disconnected");
+      showStatus("Reconnect...", "System Status");
+      break;
+
+    case sIOtype_EVENT: {
       String msg = String((char*)payload);
-      Serial.println(msg);
+      Serial.println("Received: " + msg);
 
       DynamicJsonDocument doc(1024);
-      DeserializationError error = deserializeJson(doc, msg);
+      DeserializationError error = deserializeJson(doc, payload);
       
       if (error) {
         Serial.println("JSON Parse Error");
         return;
       }
 
-      String msgType = doc["type"];
+      // Socket.io events wrap data inside an array: ["eventName", { data object }]
+      String eventName = doc[0].as<String>();
+      JsonObject data = doc[1].as<JsonObject>();
 
-      ////////////////// ORDER //////////////////
-      if (msgType == "ORDER") {
+      if (eventName == "message" || eventName == "notification") {
+        
+        String msgType = data["type"].as<String>();
 
-        totalItems = 0;
-        totalAmount = doc["total"];
+        ////////////////// ORDER //////////////////
+        if (msgType == "ORDER") {
 
-        JsonArray items = doc["items"];
+          totalItems = 0;
+          totalAmount = data["total"].as<int>();
 
-        for (JsonObject item : items) {
-          if (totalItems < 10) {
-            String name = item["name"];
-            int qty = item["qty"];
-            lines[totalItems++] = name + " x" + String(qty);
+          JsonArray items = data["items"].as<JsonArray>();
+
+          for (JsonObject item : items) {
+            if (totalItems < 10) {
+              String name = item["name"].as<String>();
+              int qty = item["qty"].as<int>();
+              lines[totalItems++] = name + " x" + String(qty);
+            }
           }
+
+          showOrder();
         }
 
-        showOrder();
-      }
-
-      ////////////////// ALERT / STATUS //////////////////
-      else if (msgType == "STATUS" || msgType == "ALERT") {
-        String status = doc["status"];
-        String from = doc.containsKey("from") ? doc["from"].as<String>() : "Notification";
-        
-        // e.g. from = "Kitchen", status = "Order Ready"
-        // e.g. from = "Waiter", status = "Table 3 Needs Help"
-        showStatus(status, from);
+        ////////////////// ALERT / STATUS //////////////////
+        else if (msgType == "STATUS" || msgType == "ALERT") {
+          String status = data["status"].as<String>();
+          String from = data.containsKey("from") ? data["from"].as<String>() : "Notification";
+          showStatus(status, from);
+        }
       }
 
       break;
     }
-
-    case WStype_DISCONNECTED:
-      Serial.println("Disconnected");
-      showStatus("Reconnect...", "System Status");
-      break;
   }
 }
 
@@ -184,25 +189,50 @@ void setup() {
   showIntro();
   showStatus("Booting...", "System Status");
 
+  Serial.println("Connecting WiFi...");
   WiFi.begin(ssid, password);
 
-  while (WiFi.status() != WL_CONNECTED) {
+  int retry = 0;
+  while (WiFi.status() != WL_CONNECTED && retry < 20) {
     delay(500);
     Serial.print(".");
+    retry++;
   }
 
-  Serial.println("WiFi Connected");
-  showStatus("WiFi OK", "System Status");
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\n===== WIFI CONNECTED =====");
+    showStatus("WiFi OK", "System Status");
+    
+    // Step 1 Debugging: Print ESP IP Address
+    Serial.print("\nESP IP: ");
+    Serial.println(WiFi.localIP());
+  } else {
+    Serial.println("\n❌ WIFI FAILED");
+    showStatus("WiFi FAIL", "System Error");
+    return;   // STOP here (important)
+  }
 
-  webSocket.begin(ws_host, ws_port, "/");
-  webSocket.onEvent(webSocketEvent);
-  webSocket.setReconnectInterval(3000);
+  // socketIO.begin connects to standard socket.io server instances running on path "/socket.io/?EIO=4"
+  socketIO.begin(ws_host, ws_port, "/socket.io/?EIO=4");
+  Serial.println("Trying Socket.IO connection to: " + String(ws_host) + ":" + String(ws_port));
+  
+  socketIO.onEvent(socketIOEvent);
 }
+
+// Timer for the debug ping
+unsigned long lastDebugPrint = 0;
 
 ////////////////////////////////////////////////////
 // LOOP
 ////////////////////////////////////////////////////
 void loop() {
-  webSocket.loop();
-}
+  socketIO.loop();
 
+  // Print alive state every 5 seconds to avoid flooding terminal
+  if (socketIO.isConnected()) {
+    if (millis() - lastDebugPrint > 5000) {
+      Serial.println("Socket.IO Connected Alive");
+      lastDebugPrint = millis();
+    }
+  }
+}

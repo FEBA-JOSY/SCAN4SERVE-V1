@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { cn, formatCurrency, formatTime } from '@/lib/utils'
 import type { User, Restaurant, Table, Order } from '@/types'
+import { io, Socket } from 'socket.io-client'
 
 type WaiterTab = 'tables' | 'notifications'
 
@@ -32,24 +33,20 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
         fetchProfile()
 
         // --- WebSocket Real-time Updates ---
-        const wsUrl = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080";
-        const socket = new WebSocket(wsUrl);
+        const wsUrl = process.env.NEXT_PUBLIC_WS_URL?.replace("ws://", "http://").replace("wss://", "https://") || "http://localhost:8080";
+        const socket = io(wsUrl);
 
-        socket.onopen = () => {
-            console.log("✅ Waiter WS Connected");
-        };
-
-        socket.onclose = () => {
-            console.log("❌ Waiter WS Disconnected");
-        };
-
-        socket.onerror = (err) => {
-            console.log("⚠️ Waiter WS Error:", err);
-        };
-
-        socket.onmessage = (event) => {
+        socket.on("connect", () => {
+             console.log("✅ Waiter WS Connected");
+        });
+        socket.on("disconnect", () => {
+             console.log("❌ Waiter WS Disconnected");
+        });
+        socket.on("connect_error", (err) => {
+             console.log("⚠️ Waiter WS Error:", err);
+        });
+        socket.on("notification", (data) => {
             try {
-                const data = JSON.parse(event.data);
                 if (data.type === "STATUS") {
                     console.log(`Table Status Update: ${data.tableId} -> ${data.status}`);
                     fetchTables(profile?.restaurantId);
@@ -61,7 +58,7 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
             } catch (e) {
                 console.error("WS message error", e);
             }
-        };
+        });
 
         const interval = setInterval(() => {
             if (profile?.restaurantId) {
@@ -70,7 +67,7 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
         }, 30000)
 
         return () => {
-            socket.close();
+            socket.disconnect();
             clearInterval(interval);
         }
     }, [profile?.restaurantId])

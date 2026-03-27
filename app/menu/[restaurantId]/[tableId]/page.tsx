@@ -11,6 +11,7 @@ import {
 import { cn, formatCurrency } from '@/lib/utils'
 import Image from 'next/image'
 import type { Restaurant, Category, MenuItem, Order } from '@/types'
+import { io, Socket } from 'socket.io-client'
 
 export default function CustomerMenuPage() {
     const params = useParams()
@@ -95,23 +96,23 @@ export default function CustomerMenuPage() {
     const cartCount = cartItems.reduce((sum, { quantity }) => sum + quantity, 0)
 
     // --- WebSocket Logic ---
-    const [ws, setWs] = useState<WebSocket | null>(null)
+    const [ws, setWs] = useState<Socket | null>(null)
 
     useEffect(() => {
-        const wsUrl = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080";
-        const socket = new WebSocket(wsUrl);
+        const wsUrl = process.env.NEXT_PUBLIC_WS_URL?.replace("ws://", "http://").replace("wss://", "https://") || "http://localhost:8080";
+        const socket = io(wsUrl);
 
-        socket.onopen = () => {
-            console.log("✅ WebSocket Connected to server");
-        };
-
-        socket.onclose = () => {
-            console.log("❌ WebSocket Disconnected from server");
-        };
-
-        socket.onmessage = (event) => {
+        socket.on("connect", () => {
+             console.log("✅ WebSocket Connected to server");
+        });
+        socket.on("disconnect", () => {
+             console.log("❌ WebSocket Disconnected from server");
+        });
+        socket.on("connect_error", (err) => {
+             console.log("⚠️ WebSocket Error:", err);
+        });
+        socket.on("notification", (data) => {
             try {
-                const data = JSON.parse(event.data);
                 console.log("📩 Received from WS:", data);
 
                 if (data.type === "STATUS") {
@@ -128,16 +129,12 @@ export default function CustomerMenuPage() {
             } catch (e) {
                 console.error("❌ WS message error", e);
             }
-        };
-
-        socket.onerror = (err) => {
-            console.log("⚠️ WebSocket Error:", err);
-        };
-
+        });
+        
         setWs(socket);
 
         return () => {
-            socket.close();
+            socket.disconnect();
         };
     }, []);
 
@@ -169,7 +166,7 @@ export default function CustomerMenuPage() {
             
             if (json.success && json.data) {
                 // Send to ESP32 via WebSocket
-                if (ws && ws.readyState === WebSocket.OPEN) {
+                if (ws && ws.connected) {
                     const wsPayload = {
                         type: "ORDER",
                         restaurantId,
@@ -182,7 +179,7 @@ export default function CustomerMenuPage() {
                         total: cartTotal + 5,
                         status: "PLACED"
                     };
-                    ws.send(JSON.stringify(wsPayload));
+                    ws.emit("message", wsPayload);
                 }
 
                 setActiveOrder(json.data)

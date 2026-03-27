@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { cn, formatCurrency, formatTime, minutesAgo } from '@/lib/utils'
 import type { Order, User, Restaurant } from '@/types'
+import { io, Socket } from 'socket.io-client'
 
 type KitchenTab = 'orders' | 'notifications' | 'history'
 
@@ -25,7 +26,7 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
     const [soundEnabled, setSoundEnabled] = useState(true)
     const [searchQuery, setSearchQuery] = useState('')
     const [activeTab, setActiveTab] = useState<KitchenTab>(initialTab)
-    const [ws, setWs] = useState<WebSocket | null>(null)
+    const [ws, setWs] = useState<Socket | null>(null)
     const audioRef = useRef<HTMLAudioElement | null>(null)
     const router = useRouter()
     const pathname = usePathname()
@@ -42,34 +43,30 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
         audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3')
 
         // --- WebSocket Real-time Updates ---
-        const wsUrl = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080";
-        const socket = new WebSocket(wsUrl);
+        const wsUrl = process.env.NEXT_PUBLIC_WS_URL?.replace("ws://", "http://").replace("wss://", "https://") || "http://localhost:8080";
+        const socket = io(wsUrl);
 
-        socket.onopen = () => {
-            console.log("✅ Kitchen WS Connected");
-        };
-
-        socket.onclose = () => {
-            console.log("❌ Kitchen WS Disconnected");
-        };
-
-        socket.onerror = (err) => {
-            console.log("⚠️ Kitchen WS Error:", err);
-        };
-
-        socket.onmessage = (event) => {
+        socket.on("connect", () => {
+             console.log("✅ Kitchen WS Connected");
+        });
+        socket.on("disconnect", () => {
+             console.log("❌ Kitchen WS Disconnected");
+        });
+        socket.on("connect_error", (err) => {
+             console.log("⚠️ Kitchen WS Error:", err);
+        });
+        socket.on("notification", (data) => {
             try {
-                const data = JSON.parse(event.data);
                 if (data.type === "ORDER") {
                     console.log("New order detected via WS:", data);
-                    handleNewOrder(data as any); 
+                    handleNewOrder(data as any);
                     fetchOrders();
                 }
             } catch (e) {
                 console.error("WS message error", e);
             }
-        };
-
+        });
+        
         setWs(socket);
 
         // Realtime disabled after migration from Supabase
@@ -140,14 +137,14 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
             const json = await res.json()
             if (json.success) {
                     toast.success(`Order marked as ${status}`)
-                    if (ws && ws.readyState === WebSocket.OPEN) {
+                    if (ws && ws.connected) {
                         const wsPayload = { 
                             type: "STATUS", 
                             tableId: String(json.data.tableId), 
                             status: status.toUpperCase() 
                         };
                         console.log("🚀 Sending Status Update via WS:", wsPayload);
-                        ws.send(JSON.stringify(wsPayload));
+                        ws.emit("message", wsPayload);
                     }
                     fetchOrders()
                 }

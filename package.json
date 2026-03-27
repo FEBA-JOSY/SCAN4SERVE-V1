@@ -40,6 +40,8 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "recharts": "^2.10.3",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
     "sonner": "^1.4.41",
     "tailwind-merge": "^2.2.1",
     "ws": "^8.20.0"
