@@ -107,7 +107,7 @@ export default function CustomerMenuPage() {
 
         client.on('connect', () => {
             console.log("✅ Menu MQTT Connected");
-            client.subscribe('restaurant/snmimt/#');
+            client.subscribe('restaurant/snmimt/table/1');
         });
 
         client.on('error', (err) => {
@@ -182,7 +182,7 @@ export default function CustomerMenuPage() {
                         total: cartTotal + 5,
                         status: "PLACED"
                     };
-                    mqttClient.publish(`restaurant/snmimt/table/${tableId || "T01"}`, JSON.stringify(wsPayload));
+                    mqttClient.publish("restaurant/snmimt/table/1", JSON.stringify(wsPayload));
                 }
 
                 setActiveOrder(json.data)

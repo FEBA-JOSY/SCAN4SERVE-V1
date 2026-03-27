@@ -41,7 +41,7 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
 
         client.on('connect', () => {
             console.log("✅ Waiter MQTT Connected");
-            client.subscribe('restaurant/snmimt/#');
+            client.subscribe('restaurant/snmimt/table/1');
         });
 
         client.on('error', (err) => {

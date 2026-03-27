@@ -28,9 +28,9 @@ const char* mqtt_pass = "scan4serve";
 const char* client_id = "esp32_table_01_secure"; // Must be unique
 
 //////////////// TOPICS //////////////////
-const char* topic_all = "restaurant/snmimt/#";
-const char* topic_status = "restaurant/snmimt/status";
-const char* topic_order = "restaurant/snmimt/table/T01";
+const char* topic_all = "restaurant/snmimt/table/1";
+const char* topic_status = "restaurant/snmimt/table/1";
+const char* topic_order = "restaurant/snmimt/table/1";
 
 WiFiClientSecure espClient;
 PubSubClient mqtt(espClient);

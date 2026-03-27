@@ -51,7 +51,7 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
 
         client.on('connect', () => {
             console.log("✅ Kitchen MQTT Connected");
-            client.subscribe('restaurant/snmimt/#');
+            client.subscribe('restaurant/snmimt/table/1');
         });
 
         client.on('error', (err) => {
@@ -148,7 +148,7 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
                             status: status.toUpperCase() 
                         };
                         console.log("🚀 Sending Status Update via MQTT:", wsPayload);
-                        mqttClient.publish("restaurant/snmimt/status", JSON.stringify(wsPayload));
+                        mqttClient.publish("restaurant/snmimt/table/1", JSON.stringify(wsPayload));
                     }
                     fetchOrders()
                 }

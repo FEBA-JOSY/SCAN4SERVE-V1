@@ -778,7 +778,7 @@ function OrdersTab({ restaurantId }: { restaurantId?: string }) {
 
         client.on('connect', () => {
             console.log("✅ Manager MQTT Connected");
-            client.subscribe('restaurant/snmimt/#');
+            client.subscribe('restaurant/snmimt/table/1');
         });
 
         client.on('error', (err) => {
