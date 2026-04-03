@@ -16,10 +16,10 @@ import mqtt from 'mqtt'
 type KitchenTab = 'orders' | 'notifications' | 'history'
 
 export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab?: KitchenTab } = {}) {
-        // Fetch profile on mount to avoid infinite loading
-        useEffect(() => {
-            fetchProfile();
-        }, []);
+    // Fetch profile on mount to avoid infinite loading
+    useEffect(() => {
+        fetchProfile();
+    }, []);
     const [profile, setProfile] = useState<any>(null)
     const [orders, setOrders] = useState<Order[]>([])
     const [loading, setLoading] = useState(true)
@@ -51,7 +51,7 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
 
         client.on('connect', () => {
             console.log("✅ Kitchen MQTT Connected");
-            client.subscribe('restaurant/snmimt/table/1');
+            client.subscribe('restaurant/snmimt/table/T01');
         });
 
         client.on('error', (err) => {
@@ -70,7 +70,7 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
                 console.error("MQTT message error", e);
             }
         });
-        
+
         setMqttClient(client);
 
         // Realtime disabled after migration from Supabase
@@ -140,18 +140,18 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
             })
             const json = await res.json()
             if (json.success) {
-                    toast.success(`Order marked as ${status}`)
-                    if (mqttClient && mqttClient.connected) {
-                        const wsPayload = { 
-                            type: "STATUS", 
-                            tableId: String(json.data.tableId), 
-                            status: status.toUpperCase() 
-                        };
-                        console.log("🚀 Sending Status Update via MQTT:", wsPayload);
-                        mqttClient.publish("restaurant/snmimt/table/1", JSON.stringify(wsPayload));
-                    }
-                    fetchOrders()
+                toast.success(`Order marked as ${status}`)
+                if (mqttClient && mqttClient.connected) {
+                    const wsPayload = {
+                        type: "STATUS",
+                        status: status.toUpperCase(),
+                        table: "T01"
+                    };
+                    console.log("🚀 Sending Status Update via MQTT:", wsPayload);
+                    mqttClient.publish("restaurant/snmimt/table/T01", JSON.stringify(wsPayload));
                 }
+                fetchOrders()
+            }
         } catch (error) {
             toast.error('Update failed')
         }
@@ -171,8 +171,7 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
             />
 
             <main className="flex-1 flex flex-col min-w-0">
-                {/* Top Header */}
-                <header className="h-16 flex items-center justify-between px-8 border-b border-gray-800/60 glass z-20">
+                <header className="h-16 flex items-center justify-between pl-16 pr-8 md:px-8 border-b border-gray-800/60 glass z-20">
                     <div className="flex items-center gap-4">
                         <div className="w-10 h-10 brand-gradient rounded-xl flex items-center justify-center glow-orange-sm">
                             <ChefHat className="w-6 h-6 text-white" />
@@ -223,7 +222,7 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
                                 </button>
                             </>
                         )}
-                        
+
                         <div className="flex items-center gap-2 bg-gray-900 p-1 rounded-xl border border-gray-800">
                             <button
                                 onClick={() => setActiveTab('orders')}
@@ -521,7 +520,7 @@ function HistoryTab({ restaurantId }: { restaurantId?: string }) {
                     <h3 className="font-bold text-white text-lg mb-2 text-shadow-sm uppercase italic tracking-tight">Order Prep History</h3>
                     <p className="text-gray-400 text-sm">Review recently prepared orders</p>
                 </div>
-                
+
                 <div className="flex items-center gap-3 bg-gray-900 px-4 py-2 rounded-xl border border-gray-800">
                     <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest leading-none">Select Date:</label>
                     <input

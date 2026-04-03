@@ -74,7 +74,7 @@ export default function ManagerDashboard({ initialTab = 'overview' }: { initialT
             />
 
             <main className="flex-1 flex flex-col min-w-0">
-                <header className="h-16 flex items-center justify-between px-8 border-b border-gray-800/60 glass z-20">
+                <header className="h-16 flex items-center justify-between pl-16 pr-8 md:px-8 border-b border-gray-800/60 glass z-20">
                     <div className="flex items-center gap-3">
                         <TrendingUp className="w-5 h-5 text-orange-500" />
                         <h2 className="text-xl font-bold text-white tracking-tight">Manager Hub</h2>
@@ -743,6 +743,7 @@ function OrdersTab({ restaurantId }: { restaurantId?: string }) {
         startDate: new Date().toISOString().split('T')[0],
         endDate: new Date().toISOString().split('T')[0]
     })
+    const [mqttClient, setMqttClient] = useState<mqtt.MqttClient | null>(null)
 
     const fetchOrders = useCallback(async () => {
         if (!restaurantId) return
@@ -768,7 +769,7 @@ function OrdersTab({ restaurantId }: { restaurantId?: string }) {
 
     useEffect(() => {
         if (restaurantId) fetchOrders()
-        
+
         // --- MQTT Real-time Updates ---
         const client = mqtt.connect('wss://y12dbb61.ala.asia-southeast1.emqxsl.com:8084/mqtt', {
             username: 'table_T01',
@@ -778,7 +779,7 @@ function OrdersTab({ restaurantId }: { restaurantId?: string }) {
 
         client.on('connect', () => {
             console.log("✅ Manager MQTT Connected");
-            client.subscribe('restaurant/snmimt/table/1');
+            client.subscribe('restaurant/snmimt/table/T01');
         });
 
         client.on('error', (err) => {
@@ -797,9 +798,11 @@ function OrdersTab({ restaurantId }: { restaurantId?: string }) {
             }
         });
 
+        setMqttClient(client);
+
         // Still keep a longer polling interval as a fallback
-        const interval = setInterval(() => fetchOrders(), 30000) 
-        
+        const interval = setInterval(() => fetchOrders(), 30000)
+
         return () => {
             client.end();
             clearInterval(interval);
@@ -815,6 +818,27 @@ function OrdersTab({ restaurantId }: { restaurantId?: string }) {
             })
             if (res.ok) {
                 toast.success('Order status updated')
+
+                if (mqttClient && mqttClient.connected) {
+                    const wsPayload: any = {
+                        type: "STATUS",
+                        table: "T01"
+                    };
+
+                    if (newStatus === "completed") {
+                        wsPayload.status = "PAID";
+                        const order = orders.find(o => o.id === orderId);
+                        if (order && order.totalAmount) {
+                            wsPayload.total = Number(order.totalAmount);
+                        }
+                    } else {
+                        wsPayload.status = newStatus.toUpperCase();
+                    }
+
+                    console.log(`🚀 Sending Manager Status Update via MQTT:`, wsPayload);
+                    mqttClient.publish("restaurant/snmimt/table/T01", JSON.stringify(wsPayload));
+                }
+
                 fetchOrders()
             } else {
                 toast.error('Failed to update order')

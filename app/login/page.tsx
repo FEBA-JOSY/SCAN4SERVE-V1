@@ -45,29 +45,12 @@ export default function LoginPage() {
                 throw new Error('Authentication failed')
             }
 
-            // Fetch user data using next-auth getSession (reliable after signIn)
-            console.log('Fetching session data...')
-            const session = await getSession()
-            console.log('Session data:', session)
-
-            if (!session || !session.user) {
-                console.error('Failed to get user session data')
-                throw new Error('Failed to fetch user data')
-            }
-
-            const role = (session.user as any).role?.toLowerCase()
-            const targetPath = ROLE_REDIRECT[role] || '/'
-            
-            console.log('User role:', role)
-            console.log('Redirecting to:', targetPath)
-
             toast.success(`Welcome back! Redirecting...`)
             
-            // For Vercel, using window.location.href ensures a fresh session 
-            // is visible to the server on the first request of the destination page.
+            // Navigate to the root '/' and let the Server-Side App Router (app/page.tsx)
+            // read the session cookie and natively redirect to the precise dashboard based on role.
             setTimeout(() => {
-                console.log('Triggering navigation to:', targetPath)
-                window.location.href = targetPath
+                window.location.href = '/'
             }, 800)
             
         } catch (err: unknown) {

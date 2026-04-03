@@ -27,6 +27,14 @@ export default function CustomerMenuPage() {
     const [searchQuery, setSearchQuery] = useState('')
     const [placingOrder, setPlacingOrder] = useState(false)
     const [activeOrder, setActiveOrder] = useState<Order | null>(null)
+    const [sessionExpired, setSessionExpired] = useState(false)
+
+    useEffect(() => {
+        // Hide direct access URL from the address bar to prevent sharing
+        if (typeof window !== 'undefined' && window.history.replaceState) {
+            window.history.replaceState(null, '', '/menu')
+        }
+    }, [])
 
     const fetchMenu = useCallback(async () => {
         try {
@@ -59,6 +67,45 @@ export default function CustomerMenuPage() {
     useEffect(() => {
         fetchMenu()
     }, [fetchMenu])
+
+    // Session inactivity timeout (5 minutes)
+    useEffect(() => {
+        if (sessionExpired) return;
+
+        let timeoutId: NodeJS.Timeout;
+
+        const resetTimer = () => {
+            clearTimeout(timeoutId);
+            timeoutId = setTimeout(() => {
+                setSessionExpired(true);
+            }, 5 * 60 * 1000); // 5 minutes
+        };
+
+        const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+        events.forEach(e => document.addEventListener(e, resetTimer));
+
+        resetTimer(); // Initialize
+
+        return () => {
+            clearTimeout(timeoutId);
+            events.forEach(e => document.removeEventListener(e, resetTimer));
+        };
+    }, [sessionExpired]);
+
+    if (sessionExpired) {
+        return (
+            <div className="flex h-screen bg-gray-950 items-center justify-center p-4">
+                <div className="glass-card p-10 text-center max-w-sm w-full border-red-500/20 shadow-2xl relative overflow-hidden slide-in">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-red-500"></div>
+                    <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <Clock className="w-10 h-10 text-red-500" />
+                    </div>
+                    <h1 className="text-2xl font-black text-white mb-2">Session Expired</h1>
+                    <p className="text-gray-400 text-sm mb-6">Your session has expired due to inactivity. Please re-scan the QR code on your table to view the menu again.</p>
+                </div>
+            </div>
+        )
+    }
 
     const addToCart = (item: MenuItem) => {
         setCart(prev => {
@@ -133,7 +180,7 @@ export default function CustomerMenuPage() {
                 console.error("❌ MQTT parse error", e);
             }
         });
-        
+
         setMqttClient(client);
 
         return () => {
@@ -166,7 +213,7 @@ export default function CustomerMenuPage() {
             })
 
             const json = await res.json()
-            
+
             if (json.success && json.data) {
                 // Send to ESP32 / Kitchen via MQTT
                 if (mqttClient && mqttClient.connected) {
@@ -291,95 +338,95 @@ export default function CustomerMenuPage() {
                 {categories
                     .filter(cat => activeCategory === 'all' || cat.id === activeCategory)
                     .map(category => {
-                    const filteredItems = category.menuItems?.filter(item =>
-                        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                        item.description?.toLowerCase().includes(searchQuery.toLowerCase())
-                    )
+                        const filteredItems = category.menuItems?.filter(item =>
+                            item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            item.description?.toLowerCase().includes(searchQuery.toLowerCase())
+                        )
 
-                    if (filteredItems?.length === 0) return null
+                        if (filteredItems?.length === 0) return null
 
-                    return (
-                        <section key={category.id} id={`cat-${category.id}`}>
-                            <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                                <span className="w-1 h-5 brand-gradient rounded-full" />
-                                {category.name}
-                            </h2>
-                            <div className="grid grid-cols-1 gap-4">
-                                {filteredItems.map(item => (
-                                    <div key={item.id} className="glass-card p-3 flex gap-4 fade-in group">
-                                        <div className="w-24 h-24 bg-gray-900 rounded-xl overflow-hidden shrink-0 relative">
-                                            {item.imageUrl ? (
-                                                <Image src={item.imageUrl} alt={item.name} width={96} height={96} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                                            ) : (
-                                                <div className="w-full h-full flex items-center justify-center text-gray-800">
-                                                    <Utensils className="w-8 h-8" />
-                                                </div>
-                                            )}
-                                            {!item.available && (
-                                                <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center text-[10px] font-bold text-white uppercase tracking-tighter">
-                                                    Sold Out
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        <div className="flex-1 flex flex-col justify-between py-0.5">
-                                            <div>
-                                                <div className="flex items-start justify-between">
-                                                    <h3 className="font-semibold text-white group-hover:text-orange-400 transition-colors">{item.name}</h3>
-                                                    <span className={cn(
-                                                        "w-3 h-3 border-2 rounded-sm shrink-0 mt-1",
-                                                        item.isVeg ? "border-green-600 bg-green-600/10" : "border-red-600 bg-red-600/10"
-                                                    )}>
-                                                        <span className={cn(
-                                                            "w-1.5 h-1.5 rounded-full m-auto",
-                                                            item.isVeg ? "bg-green-600" : "bg-red-600"
-                                                        )} />
-                                                    </span>
-                                                </div>
-                                                <p className="text-xs text-gray-500 mt-1 line-clamp-2 leading-relaxed">
-                                                    {item.description || 'Deliciously prepared with fresh ingredients.'}
-                                                </p>
+                        return (
+                            <section key={category.id} id={`cat-${category.id}`}>
+                                <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                                    <span className="w-1 h-5 brand-gradient rounded-full" />
+                                    {category.name}
+                                </h2>
+                                <div className="grid grid-cols-1 gap-4">
+                                    {filteredItems.map(item => (
+                                        <div key={item.id} className="glass-card p-3 flex gap-4 fade-in group">
+                                            <div className="w-24 h-24 bg-gray-900 rounded-xl overflow-hidden shrink-0 relative">
+                                                {item.imageUrl ? (
+                                                    <Image src={item.imageUrl} alt={item.name} width={96} height={96} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                                                ) : (
+                                                    <div className="w-full h-full flex items-center justify-center text-gray-800">
+                                                        <Utensils className="w-8 h-8" />
+                                                    </div>
+                                                )}
+                                                {!item.available && (
+                                                    <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center text-[10px] font-bold text-white uppercase tracking-tighter">
+                                                        Sold Out
+                                                    </div>
+                                                )}
                                             </div>
 
-                                            <div className="flex items-center justify-between mt-2">
-                                                <span className="font-bold text-orange-500">{formatCurrency(item.price)}</span>
+                                            <div className="flex-1 flex flex-col justify-between py-0.5">
+                                                <div>
+                                                    <div className="flex items-start justify-between">
+                                                        <h3 className="font-semibold text-white group-hover:text-orange-400 transition-colors">{item.name}</h3>
+                                                        <span className={cn(
+                                                            "w-3 h-3 border-2 rounded-sm shrink-0 mt-1",
+                                                            item.isVeg ? "border-green-600 bg-green-600/10" : "border-red-600 bg-red-600/10"
+                                                        )}>
+                                                            <span className={cn(
+                                                                "w-1.5 h-1.5 rounded-full m-auto",
+                                                                item.isVeg ? "bg-green-600" : "bg-red-600"
+                                                            )} />
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-xs text-gray-500 mt-1 line-clamp-2 leading-relaxed">
+                                                        {item.description || 'Deliciously prepared with fresh ingredients.'}
+                                                    </p>
+                                                </div>
 
-                                                {cart[item.id] ? (
-                                                    <div className="flex items-center gap-3 bg-gray-900 border border-gray-800 rounded-xl px-2 py-1">
-                                                        <button
-                                                            onClick={() => removeFromCart(item.id)}
-                                                            className="p-1 text-orange-500 hover:bg-orange-500/10 rounded-lg transition-colors"
-                                                        >
-                                                            <Minus className="w-4 h-4" />
-                                                        </button>
-                                                        <span className="text-sm font-bold text-white w-4 text-center">{cart[item.id].quantity}</span>
+                                                <div className="flex items-center justify-between mt-2">
+                                                    <span className="font-bold text-orange-500">{formatCurrency(item.price)}</span>
+
+                                                    {cart[item.id] ? (
+                                                        <div className="flex items-center gap-3 bg-gray-900 border border-gray-800 rounded-xl px-2 py-1">
+                                                            <button
+                                                                onClick={() => removeFromCart(item.id)}
+                                                                className="p-1 text-orange-500 hover:bg-orange-500/10 rounded-lg transition-colors"
+                                                            >
+                                                                <Minus className="w-4 h-4" />
+                                                            </button>
+                                                            <span className="text-sm font-bold text-white w-4 text-center">{cart[item.id].quantity}</span>
+                                                            <button
+                                                                disabled={!item.available}
+                                                                onClick={() => addToCart(item)}
+                                                                className="p-1 text-orange-500 hover:bg-orange-500/10 rounded-lg transition-colors disabled:opacity-30"
+                                                            >
+                                                                <Plus className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    ) : (
                                                         <button
                                                             disabled={!item.available}
                                                             onClick={() => addToCart(item)}
-                                                            className="p-1 text-orange-500 hover:bg-orange-500/10 rounded-lg transition-colors disabled:opacity-30"
-                                                        >
-                                                            <Plus className="w-4 h-4" />
-                                                        </button>
-                                                    </div>
-                                                ) : (
-                                                    <button
-                                                        disabled={!item.available}
-                                                        onClick={() => addToCart(item)}
-                                                        className="bg-orange-500 text-white px-4 py-1.5 rounded-xl text-xs font-bold 
+                                                            className="bg-orange-500 text-white px-4 py-1.5 rounded-xl text-xs font-bold 
                                        hover:bg-orange-600 active:scale-95 transition-all duration-200
                                        disabled:bg-gray-800 disabled:text-gray-500 disabled:scale-100"
-                                                    >
-                                                        Add +
-                                                    </button>
-                                                )}
+                                                        >
+                                                            Add +
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </section>
-                    )
-                })}
+                                    ))}
+                                </div>
+                            </section>
+                        )
+                    })}
             </main>
 
             {/* Sticky Bottom Cart Bar */}

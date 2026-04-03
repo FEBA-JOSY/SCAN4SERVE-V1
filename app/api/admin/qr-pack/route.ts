@@ -35,11 +35,12 @@ export async function GET(request: Request) {
         });
 
         // Create a simple CSV-like response with QR code URLs
-        const qrBaseUrl = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/menu/${restaurantId}`;
-        
+        const baseUrl = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
+        const qrBaseUrl = `${baseUrl}/menu/${restaurantId}`;
+
         let csvContent = "Table Number,QR Code URL\n";
         tables.forEach((table: { id: string; tableNumber: number }) => {
-            const qrUrl = `${qrBaseUrl}/${table.id}`;
+            const qrUrl = `${qrBaseUrl}/${table.tableNumber}`;
             csvContent += `Table ${table.tableNumber},"${qrUrl}"\n`;
         });
 

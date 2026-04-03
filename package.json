@@ -6,8 +6,7 @@
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start",
-    "lint": "eslint",
-    "websocket": "node server.js"
+    "lint": "eslint"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
@@ -41,11 +40,8 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "recharts": "^2.10.3",
-    "socket.io": "^4.8.3",
-    "socket.io-client": "^4.8.3",
     "sonner": "^1.4.41",
-    "tailwind-merge": "^2.2.1",
-    "ws": "^8.20.0"
+    "tailwind-merge": "^2.2.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",

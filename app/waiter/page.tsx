@@ -21,6 +21,7 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
     const [loading, setLoading] = useState(true)
     const [selectedTable, setSelectedTable] = useState<any>(null)
     const [activeTab, setActiveTab] = useState<WaiterTab>(initialTab)
+    const [mqttClient, setMqttClient] = useState<mqtt.MqttClient | null>(null)
     const router = useRouter()
     const pathname = usePathname()
 
@@ -41,7 +42,7 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
 
         client.on('connect', () => {
             console.log("✅ Waiter MQTT Connected");
-            client.subscribe('restaurant/snmimt/table/1');
+            client.subscribe('restaurant/snmimt/table/T01');
         });
 
         client.on('error', (err) => {
@@ -63,6 +64,8 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
                 console.error("MQTT parse error", e);
             }
         });
+
+        setMqttClient(client);
 
         const interval = setInterval(() => {
             if (profile?.restaurantId) {
@@ -119,6 +122,26 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
             const json = await res.json()
             if (json.success) {
                 toast.success(action === 'serve' ? 'Order Served!' : 'Order Completed & Paid')
+
+                if (mqttClient && mqttClient.connected) {
+                    const wsPayload: any = {
+                        type: "STATUS",
+                        table: "T01"
+                    };
+
+                    if (action === "serve") {
+                        wsPayload.status = "SERVED";
+                    } else if (action === "complete") {
+                        wsPayload.status = "PAID";
+                        const order = selectedTable?.activeOrders?.find((o: any) => o.id === orderId);
+                        if (order && order.totalAmount) {
+                            wsPayload.total = Number(order.totalAmount);
+                        }
+                    }
+                    console.log(`🚀 Sending Waiter Status Update via MQTT:`, wsPayload);
+                    mqttClient.publish("restaurant/snmimt/table/T01", JSON.stringify(wsPayload));
+                }
+
                 const updatedTables = await fetchTables()
                 if (selectedTable && updatedTables) {
                     const updatedTable = updatedTables.find((t: any) => t.id === selectedTable.id)
@@ -139,7 +162,7 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
             />
 
             <main className="flex-1 flex flex-col min-w-0">
-                <header className="h-16 flex items-center justify-between px-8 border-b border-gray-800/60 glass z-20">
+                <header className="h-16 flex items-center justify-between pl-16 pr-8 md:px-8 border-b border-gray-800/60 glass z-20">
                     <div>
                         <h2 className="text-xl font-bold text-white tracking-tight">Waiter Hub</h2>
                     </div>
@@ -419,7 +442,7 @@ function NotificationsTab({ restaurantId }: { restaurantId?: string }) {
                     <h3 className="font-bold text-white text-lg mb-2">Order Notifications & History</h3>
                     <p className="text-gray-400 text-sm">Recent updates and delivered orders</p>
                 </div>
-                
+
                 <div className="flex bg-gray-900 rounded-lg p-1 border border-gray-800">
                     <button
                         onClick={() => setActiveSection('alerts')}
