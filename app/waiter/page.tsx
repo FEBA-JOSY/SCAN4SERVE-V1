@@ -131,12 +131,14 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
 
                     if (action === "serve") {
                         wsPayload.status = "SERVED";
-                    } else if (action === "complete") {
-                        wsPayload.status = "PAID";
                         const order = selectedTable?.activeOrders?.find((o: any) => o.id === orderId);
                         if (order && order.totalAmount) {
                             wsPayload.total = Number(order.totalAmount);
                         }
+                    } else if (action === "complete") {
+                        wsPayload.type = "CLEAR";
+                        wsPayload.status = "PAID";
+                        wsPayload.action = "remove_data";
                     }
                     console.log(`🚀 Sending Waiter Status Update via MQTT:`, wsPayload);
                     mqttClient.publish("restaurant/snmimt/table/T01", JSON.stringify(wsPayload));
@@ -307,17 +309,22 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
                                                             </tr>
                                                         </thead>
                                                         <tbody>
-                                                            {order.items?.map((item: any) => (
-                                                                <tr key={item.id}>
-                                                                    <td>{item.name}</td>
-                                                                    <td className="text-center">{item.quantity}</td>
-                                                                    <td className="text-center">{formatCurrency(item.price)}</td>
-                                                                    <td className="text-center">{formatCurrency(item.price * item.quantity)}</td>
+                                                            {order.items?.map((item: any, idx: number) => (
+                                                                <tr key={idx} className={cn("border-b border-gray-800/50 last:border-0", item.status === 'rejected' && "opacity-50")}>
+                                                                    <td className="py-2">
+                                                                        <span className={cn(item.status === 'rejected' && "line-through text-red-400")}>{item.name}</span>
+                                                                        {item.status === 'rejected' && <span className="block text-[8px] font-black text-red-500 bg-red-500/10 px-1 py-0.5 rounded w-fit mt-0.5 uppercase tracking-widest">Unavailable</span>}
+                                                                    </td>
+                                                                    <td className="text-center py-2">{item.quantity}</td>
+                                                                    <td className="text-center py-2">{formatCurrency(item.price)}</td>
+                                                                    <td className={cn("text-center py-2 font-medium", item.status === 'rejected' ? "text-red-500/50 line-through" : "text-gray-300")}>
+                                                                        {formatCurrency(item.status === 'rejected' ? 0 : item.price * item.quantity)}
+                                                                    </td>
                                                                 </tr>
                                                             ))}
-                                                            <tr>
-                                                                <td colSpan={3} className="text-right font-bold">Total</td>
-                                                                <td className="text-center font-bold">{formatCurrency(Number.isFinite(Number(order.totalAmount)) ? Number(order.totalAmount) : 0)}</td>
+                                                            <tr className="border-t border-gray-700 bg-gray-900/40">
+                                                                <td colSpan={3} className="text-right font-black uppercase tracking-widest text-[10px] py-3 pr-4">Final Total</td>
+                                                                <td className="text-center font-black text-orange-400 py-3">{formatCurrency(Number.isFinite(Number(order.totalAmount)) ? Number(order.totalAmount) : 0)}</td>
                                                             </tr>
                                                         </tbody>
                                                     </table>

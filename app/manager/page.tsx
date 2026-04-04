@@ -826,13 +826,17 @@ function OrdersTab({ restaurantId }: { restaurantId?: string }) {
                     };
 
                     if (newStatus === "completed") {
+                        wsPayload.type = "CLEAR";
                         wsPayload.status = "PAID";
-                        const order = orders.find(o => o.id === orderId);
-                        if (order && order.totalAmount) {
-                            wsPayload.total = Number(order.totalAmount);
-                        }
+                        wsPayload.action = "remove_data";
                     } else {
                         wsPayload.status = newStatus.toUpperCase();
+                        if (newStatus === "served") {
+                            const order = orders.find(o => o.id === orderId);
+                            if (order && order.totalAmount) {
+                                wsPayload.total = Number(order.totalAmount);
+                            }
+                        }
                     }
 
                     console.log(`🚀 Sending Manager Status Update via MQTT:`, wsPayload);

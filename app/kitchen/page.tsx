@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import {
     ChefHat, Clock, AlertCircle, CheckCircle2,
     ChevronRight, Timer, UtensilsCrossed, Volume2,
-    VolumeX, LayoutGrid, Search, Bell, History
+    VolumeX, LayoutGrid, Search, Bell, History, X, Check
 } from 'lucide-react'
 import { cn, formatCurrency, formatTime, minutesAgo } from '@/lib/utils'
 import type { Order, User, Restaurant } from '@/types'
@@ -27,6 +27,7 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
     const [searchQuery, setSearchQuery] = useState('')
     const [activeTab, setActiveTab] = useState<KitchenTab>(initialTab)
     const [mqttClient, setMqttClient] = useState<mqtt.MqttClient | null>(null)
+    const [rejectedItems, setRejectedItems] = useState<Record<string, number[]>>({})
     const audioRef = useRef<HTMLAudioElement | null>(null)
     const router = useRouter()
     const pathname = usePathname()
@@ -58,7 +59,8 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
             console.log("⚠️ Kitchen MQTT Error:", err);
         });
 
-        client.on('message', (topic, message) => {
+        client.on('message', (topic, message, packet) => {
+            if (packet.retain) return; // Skip retained messages to avoid notifications on load
             try {
                 const data = JSON.parse(message.toString());
                 if (data.type === "ORDER") {
@@ -131,22 +133,51 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
         fetchOrders()
     }
 
+    const toggleItemRejection = (orderId: string, itemIdx: number) => {
+        setRejectedItems(prev => {
+            const current = prev[orderId] || []
+            if (current.includes(itemIdx)) {
+                return { ...prev, [orderId]: current.filter(i => i !== itemIdx) }
+            } else {
+                return { ...prev, [orderId]: [...current, itemIdx] }
+            }
+        })
+    }
+
+    const isRejected = (orderId: string, itemIdx: number) => {
+        return rejectedItems[orderId]?.includes(itemIdx) || false;
+    }
+
     async function updateStatus(orderId: string, status: string) {
         try {
+            const rejected = rejectedItems[orderId] || [];
+            let markOutofStock = false;
+
+            if (status === 'accepted' && rejected.length > 0) {
+                markOutofStock = window.confirm("You have declined certain items in this order. Do you want to mark these items as OUT OF STOCK?");
+            }
+
             const res = await fetch('/api/kitchen/orders', {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ orderId, status })
+                body: JSON.stringify({ orderId, status, rejectedIndexes: rejected, markOutofStock })
             })
             const json = await res.json()
             if (json.success) {
                 toast.success(`Order marked as ${status}`)
                 if (mqttClient && mqttClient.connected) {
-                    const wsPayload = {
+                    const currentOrder = orders.find(o => o.id === orderId);
+                    const rejectedNames = rejected.map(idx => currentOrder?.items[idx]?.name).filter(Boolean);
+
+                    const wsPayload: any = {
                         type: "STATUS",
                         status: status.toUpperCase(),
                         table: "T01"
                     };
+
+                    if (rejectedNames.length > 0) {
+                        wsPayload.rejectedItems = rejectedNames;
+                    }
                     console.log("🚀 Sending Status Update via MQTT:", wsPayload);
                     mqttClient.publish("restaurant/snmimt/table/T01", JSON.stringify(wsPayload));
                 }
@@ -318,23 +349,50 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
 
                                         {/* Items list */}
                                         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                                            {order.items.map((item, idx) => (
-                                                <div key={idx} className="flex gap-3">
-                                                    <div className="w-6 h-6 rounded bg-gray-800 flex items-center justify-center text-xs font-bold text-orange-400 shrink-0">
-                                                        {item.quantity}
-                                                    </div>
-                                                    <div className="flex-1">
-                                                        <p className="text-sm font-bold text-gray-200">{item.name}</p>
-                                                        {item.specialInstructions && (
-                                                            <div className="mt-1 px-2 py-1 bg-red-500/5 border border-red-500/10 rounded-md">
-                                                                <p className="text-[10px] text-red-400 font-medium italic">
-                                                                    " {item.specialInstructions} "
-                                                                </p>
+                                            {order.items.map((item: any, idx: number) => {
+                                                const rejectedLocal = isRejected(order.id, idx);
+                                                const isRejectedItem = item.status === 'rejected' || rejectedLocal;
+                                                return (
+                                                    <div key={idx} className="flex gap-3 items-start relative">
+                                                        {order.status === 'placed' && item.status !== 'rejected' && (
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation()
+                                                                    toggleItemRejection(order.id, idx)
+                                                                }}
+                                                                className={cn(
+                                                                    "w-5 h-5 mt-0.5 rounded flex items-center justify-center shrink-0 border transition-all cursor-pointer",
+                                                                    rejectedLocal ? "bg-red-500/20 border-red-500 text-red-500" : "bg-green-500/10 border-green-500/30 text-green-500 hover:bg-green-500/30"
+                                                                )}
+                                                                title={rejectedLocal ? "Item Rejected" : "Item Accepted"}
+                                                            >
+                                                                {rejectedLocal ? <X className="w-3 h-3" /> : <Check className="w-3 h-3" />}
+                                                            </button>
+                                                        )}
+                                                        {item.status === 'rejected' && (
+                                                            <div className="w-5 h-5 mt-0.5 rounded bg-red-500/20 border border-red-500 flex items-center justify-center shrink-0 text-red-500" title="Rejected from Kitchen">
+                                                                <X className="w-3 h-3" />
                                                             </div>
                                                         )}
+                                                        <div className={cn("w-6 h-6 rounded bg-gray-800 flex items-center justify-center text-xs font-bold text-orange-400 shrink-0", isRejectedItem && "opacity-50 line-through")}>
+                                                            {item.quantity}
+                                                        </div>
+                                                        <div className={cn("flex-1", isRejectedItem && "opacity-50")}>
+                                                            <p className={cn("text-sm font-bold text-gray-200 flex items-center gap-2")}>
+                                                                <span className={cn(isRejectedItem && "line-through text-red-400")}>{item.name}</span>
+                                                                {item.status === 'rejected' && <span className="text-[9px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded uppercase font-black">Rejected</span>}
+                                                            </p>
+                                                            {item.specialInstructions && (
+                                                                <div className="mt-1 px-2 py-1 bg-red-500/5 border border-red-500/10 rounded-md">
+                                                                    <p className="text-[10px] text-red-400 font-medium italic">
+                                                                        " {item.specialInstructions} "
+                                                                    </p>
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            ))}
+                                                )
+                                            })}
 
                                             {order.specialInstructions && (
                                                 <div className="mt-4 p-3 bg-blue-500/5 border border-blue-500/10 rounded-xl">
@@ -356,12 +414,24 @@ export default function KitchenDashboard({ initialTab = 'orders' }: { initialTab
                                             {/* Action Buttons */}
                                             <div className="flex gap-2">
                                                 {order.status === 'placed' && (
-                                                    <button
-                                                        onClick={() => updateStatus(order.id, 'accepted')}
-                                                        className="flex-1 py-2.5 bg-yellow-500 text-black font-black text-[10px] uppercase tracking-wider rounded-xl hover:bg-yellow-400 transition-colors"
-                                                    >
-                                                        Accept Order
-                                                    </button>
+                                                    <div className="flex gap-2 w-full">
+                                                        <button
+                                                            onClick={async () => {
+                                                                if (window.confirm("Are you sure you want to completely reject this entire order?")) {
+                                                                    updateStatus(order.id, 'rejected')
+                                                                }
+                                                            }}
+                                                            className="flex-[1] py-2.5 bg-red-500/20 text-red-500 font-black text-[10px] uppercase tracking-wider rounded-xl hover:bg-red-500 hover:text-white transition-colors"
+                                                        >
+                                                            Reject All
+                                                        </button>
+                                                        <button
+                                                            onClick={() => updateStatus(order.id, 'accepted')}
+                                                            className="flex-[2] py-2.5 bg-yellow-500 text-black font-black text-[10px] uppercase tracking-wider rounded-xl hover:bg-yellow-400 transition-colors"
+                                                        >
+                                                            Accept Order
+                                                        </button>
+                                                    </div>
                                                 )}
 
                                                 {(order.status === 'accepted' || order.status === 'placed') && (

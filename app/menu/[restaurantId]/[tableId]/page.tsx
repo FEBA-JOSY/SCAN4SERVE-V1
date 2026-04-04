@@ -28,11 +28,18 @@ export default function CustomerMenuPage() {
     const [placingOrder, setPlacingOrder] = useState(false)
     const [activeOrder, setActiveOrder] = useState<Order | null>(null)
     const [sessionExpired, setSessionExpired] = useState(false)
+    const [savedOrderId, setSavedOrderId] = useState<string | null>(null)
 
     useEffect(() => {
         // Hide direct access URL from the address bar to prevent sharing
         if (typeof window !== 'undefined' && window.history.replaceState) {
             window.history.replaceState(null, '', '/menu')
+        }
+
+        // Recover active order if tab was accidentally closed
+        if (typeof localStorage !== 'undefined') {
+            const savedId = localStorage.getItem('activeOrderId');
+            if (savedId) setSavedOrderId(savedId);
         }
     }, [])
 
@@ -232,6 +239,10 @@ export default function CustomerMenuPage() {
                     mqttClient.publish("restaurant/snmimt/table/1", JSON.stringify(wsPayload));
                 }
 
+                if (typeof localStorage !== 'undefined') {
+                    localStorage.setItem('activeOrderId', json.data.id);
+                }
+                setSavedOrderId(json.data.id);
                 setActiveOrder(json.data)
                 setCart({})
                 setShowCart(false)
@@ -544,18 +555,53 @@ export default function CustomerMenuPage() {
                     </div>
                 </div>
             )}
+
+            {/* Floating Order Tracker Button */}
+            {!activeOrder && savedOrderId && !showCart && (
+                <button
+                    onClick={async () => {
+                        try {
+                            const res = await fetch(`/api/customer/orders?orderId=${savedOrderId}`);
+                            const json = await res.json();
+                            if (json.success && json.data) {
+                                if (json.data.status === 'paid' || json.data.status === 'completed') {
+                                    localStorage.removeItem('activeOrderId');
+                                    setSavedOrderId(null);
+                                    toast.info('Your previous order is complete!');
+                                } else {
+                                    setActiveOrder(json.data);
+                                }
+                            } else {
+                                localStorage.removeItem('activeOrderId');
+                                setSavedOrderId(null);
+                            }
+                        } catch (e) {
+                            console.error(e)
+                        }
+                    }}
+                    className={cn(
+                        "fixed right-4 z-40 bg-gray-900 border border-orange-500/50 text-white rounded-full px-5 py-3 shadow-[0_0_20px_rgba(249,115,22,0.3)] flex items-center justify-center gap-2 active:scale-95 transition-all glow-orange",
+                        cartCount > 0 ? "bottom-28" : "bottom-6"
+                    )}
+                >
+                    <Clock className="w-4 h-4 text-orange-400 animate-pulse" />
+                    <span className="font-bold text-xs tracking-wider uppercase text-orange-50">Track Order</span>
+                </button>
+            )}
         </div>
     )
 }
 
 function OrderTrackingView({ order, onBackToMenu }: { order: Order; onBackToMenu: () => void }) {
+    const [liveOrder, setLiveOrder] = useState<Order>(order)
     const [currentStatus, setCurrentStatus] = useState(order.status)
     const [estimatedTime, setEstimatedTime] = useState(order.estimatedTimeMinutes)
 
     useEffect(() => {
         // Sync with parent prop if it changes via WS
         setCurrentStatus(order.status);
-    }, [order.status]);
+        setLiveOrder(order);
+    }, [order]);
 
     useEffect(() => {
         // Polling for status changes
@@ -571,6 +617,7 @@ function OrderTrackingView({ order, onBackToMenu }: { order: Order; onBackToMenu
                         setCurrentStatus(newStatus);
                     }
                     setEstimatedTime(json.data.estimatedTimeMinutes)
+                    setLiveOrder(json.data)
                 }
             } catch {
                 console.error('Error polling order status');
@@ -589,6 +636,29 @@ function OrderTrackingView({ order, onBackToMenu }: { order: Order; onBackToMenu
     ]
 
     const activeIndex = steps.findIndex(s => s.key === currentStatus.toLowerCase())
+
+    if (currentStatus.toLowerCase() === 'rejected' || currentStatus.toLowerCase() === 'cancelled') {
+        return (
+            <div className="min-h-screen bg-gray-950 p-6 flex flex-col items-center justify-center fade-in text-center">
+                <div className="w-24 h-24 bg-red-500/10 rounded-full flex items-center justify-center glow-red mb-6 shadow-xl shadow-red-500/20">
+                    <X className="w-10 h-10 text-red-500" />
+                </div>
+                <h2 className="text-2xl font-black text-white mb-3 tracking-tight">Order Declined</h2>
+                <p className="text-gray-400 text-sm mb-8 px-2 leading-relaxed font-medium">
+                    Unfortunately, the kitchen is currently out of stock or unable to fulfill your exact order. Your request has been completely cancelled and the bill voided.
+                </p>
+                <button
+                    onClick={() => {
+                        if (typeof localStorage !== 'undefined') localStorage.removeItem('activeOrderId');
+                        onBackToMenu();
+                    }}
+                    className="w-full max-w-xs py-4 bg-gray-900 border border-gray-800 rounded-2xl text-white font-black tracking-widest uppercase hover:scale-95 transition-all shadow-xl"
+                >
+                    Return to Menu
+                </button>
+            </div>
+        )
+    }
 
     return (
         <div className="min-h-screen bg-gray-950 p-6 flex flex-col fade-in">
@@ -636,6 +706,34 @@ function OrderTrackingView({ order, onBackToMenu }: { order: Order; onBackToMenu
                             </div>
                         )
                     })}
+                </div>
+
+                {/* Order Summary & Exclusions */}
+                <div className="w-full bg-gray-900 border border-gray-800 rounded-2xl p-4 mt-8 shadow-xl">
+                    <h3 className="text-sm font-bold text-white mb-3">Order Details</h3>
+                    <div className="space-y-3">
+                        {Array.isArray(liveOrder.items) && liveOrder.items.map((item: any, idx: number) => (
+                            <div key={idx} className="flex justify-between items-start text-xs">
+                                <div className="flex flex-col gap-1">
+                                    <span className={cn("text-gray-300 font-medium tracking-wide", item.status === 'rejected' && "line-through opacity-50")}>
+                                        {item.quantity}x {item.name}
+                                    </span>
+                                    {item.status === 'rejected' && (
+                                        <span className="text-[9px] bg-red-500/20 text-red-400 font-black px-1.5 py-0.5 rounded uppercase tracking-wider w-fit">
+                                            Unavailable
+                                        </span>
+                                    )}
+                                </div>
+                                <span className={cn("font-black", item.status === 'rejected' ? "text-gray-600 line-through" : "text-gray-400")}>
+                                    {formatCurrency(item.price * item.quantity)}
+                                </span>
+                            </div>
+                        ))}
+                        <div className="pt-3 mt-1 border-t border-gray-800 flex justify-between items-center text-sm font-bold">
+                            <span className="text-white uppercase tracking-widest text-[10px]">Adjusted Total</span>
+                            <span className="text-orange-400 text-lg glow-orange-sm">{formatCurrency(Number.isFinite(Number(liveOrder.totalAmount)) ? Number(liveOrder.totalAmount) : 0)}</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
