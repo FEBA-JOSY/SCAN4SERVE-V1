@@ -22,6 +22,7 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
     const [selectedTable, setSelectedTable] = useState<any>(null)
     const [activeTab, setActiveTab] = useState<WaiterTab>(initialTab)
     const [mqttClient, setMqttClient] = useState<mqtt.MqttClient | null>(null)
+    const [waiterCalls, setWaiterCalls] = useState<any[]>([])
     const router = useRouter()
     const pathname = usePathname()
 
@@ -43,6 +44,7 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
         client.on('connect', () => {
             console.log("✅ Waiter MQTT Connected");
             client.subscribe('restaurant/snmimt/table/T01');
+            client.subscribe('restaurant/snmimt/waiter');
         });
 
         client.on('error', (err) => {
@@ -52,6 +54,24 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
         client.on('message', (topic, message) => {
             try {
                 const data = JSON.parse(message.toString());
+                
+                if (topic === 'restaurant/snmimt/waiter' && data.type === 'CALL') {
+                    console.log("🔔 Waiter Requested at Table:", data.table);
+                    const newCall = {
+                        id: 'call_' + Date.now(),
+                        tableNumber: data.table,
+                        timestamp: new Date().toISOString(),
+                    };
+                    setWaiterCalls(prev => {
+                        // Avoid duplicates for the same table if they spam
+                        if (prev.some(c => c.tableNumber === data.table)) return prev;
+                        return [newCall, ...prev];
+                    });
+                    toast.info(`Table ${data.table} is calling for a waiter!`, {
+                        icon: <Bell className="w-4 h-4 text-orange-500" />
+                    });
+                }
+
                 if (data.type === "STATUS") {
                     console.log(`Table Status Update: ${data.tableId} -> ${data.status}`);
                     fetchTables(profile?.restaurantId);
@@ -155,6 +175,25 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
         }
     }
 
+    const approveCall = (callId: string, tableNumber: string) => {
+        if (mqttClient && mqttClient.connected) {
+            const ackMsg = {
+                type: "ACK",
+                table: tableNumber,
+                status: "notified",
+                message: "waiter notified"
+            };
+            console.log(`📡 Approving Table ${tableNumber} call via MQTT`);
+            mqttClient.publish("restaurant/snmimt/waiter/ack", JSON.stringify(ackMsg));
+            setWaiterCalls(prev => prev.filter(c => c.id !== callId));
+            toast.success(`Table ${tableNumber} Notified`, {
+                icon: <CheckCircle2 className="w-4 h-4 text-green-500" />
+            });
+        } else {
+            toast.error("MQTT not connected, cannot approve");
+        }
+    }
+
     return (
         <div className="flex h-screen bg-gray-950 overflow-hidden">
             <Sidebar
@@ -228,6 +267,12 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
                                     </div>
 
                                     <span className="text-2xl font-black text-white">#{table.tableNumber}</span>
+                                    {waiterCalls.some(c => String(c.tableNumber) === String(table.tableNumber)) && (
+                                        <div className="absolute top-2 left-2 flex items-center gap-1 bg-red-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter animate-pulse">
+                                            <Bell className="w-2 h-2" />
+                                            Calling
+                                        </div>
+                                    )}
                                     <span className={cn(
                                         "text-[8px] font-black uppercase tracking-widest mt-1",
                                         table.hasActiveOrder ? "text-blue-400" : "text-gray-600"
@@ -246,7 +291,11 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
                             ))}
                         </div>
                     ) : (
-                        <NotificationsTab restaurantId={profile?.restaurantId} />
+                        <NotificationsTab 
+                            restaurantId={profile?.restaurantId} 
+                            waiterCalls={waiterCalls}
+                            onApproveCall={approveCall}
+                        />
                     )}
                 </div>
             </main>
@@ -378,7 +427,15 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
     )
 }
 
-function NotificationsTab({ restaurantId }: { restaurantId?: string }) {
+function NotificationsTab({ 
+    restaurantId, 
+    waiterCalls, 
+    onApproveCall 
+}: { 
+    restaurantId?: string,
+    waiterCalls: any[],
+    onApproveCall: (id: string, table: string) => void
+}) {
     const [notifications, setNotifications] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [activeSection, setActiveSection] = useState<'alerts' | 'delivered'>('alerts')
@@ -463,7 +520,51 @@ function NotificationsTab({ restaurantId }: { restaurantId?: string }) {
             </div>
 
             {activeSection === 'alerts' ? (
-                notifications.length === 0 ? (
+                <div className="space-y-6">
+                    {/* Hardware Waiter Calls Section */}
+                    {waiterCalls.length > 0 && (
+                        <div className="space-y-3 max-w-2xl">
+                            <div className="flex items-center gap-2 px-1">
+                                <div className="w-2 h-2 rounded-full bg-orange-500 animate-ping" />
+                                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-500">Active Hardware Calls</h4>
+                            </div>
+                            {waiterCalls.map((call) => (
+                                <div key={call.id} className="glass-card p-6 border-2 border-orange-500/30 bg-orange-500/5 relative overflow-hidden group">
+                                    <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 blur-3xl -mr-16 -mt-16 group-hover:bg-orange-500/20 transition-all duration-500" />
+                                    
+                                    <div className="flex items-center justify-between relative z-10">
+                                        <div className="flex items-center gap-6">
+                                            <div className="w-20 h-20 bg-orange-500 rounded-3xl flex flex-col items-center justify-center shadow-2xl shadow-orange-500/40 border border-white/20">
+                                                <span className="text-[10px] font-black text-orange-200 uppercase tracking-widest leading-none mb-1">Table</span>
+                                                <span className="text-4xl font-black text-white leading-none">{call.tableNumber}</span>
+                                            </div>
+                                            <div>
+                                                <h4 className="text-2xl font-black text-white tracking-tight">Waiter Calling</h4>
+                                                <p className="text-gray-400 text-sm mt-1">Customer needs immediate assistance</p>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="flex flex-col items-end gap-4">
+                                            <div className="flex items-center gap-2 bg-gray-900/50 px-3 py-1.5 rounded-full border border-gray-800">
+                                                <Clock className="w-3.5 h-3.5 text-orange-500" />
+                                                <span className="text-xs font-bold text-gray-400">
+                                                    {new Date(call.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                                </span>
+                                            </div>
+                                            <button 
+                                                onClick={() => onApproveCall(call.id, String(call.tableNumber))}
+                                                className="px-8 py-3 bg-white text-black hover:bg-orange-500 hover:text-white text-[11px] font-black uppercase tracking-widest rounded-2xl transition-all duration-300 active:scale-95 shadow-xl hover:shadow-orange-500/30 group-hover:translate-y-[-2px]"
+                                            >
+                                                Approve Call
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {notifications.length === 0 ? (
                     <div className="glass-card p-12 text-center">
                         <Bell className="w-12 h-12 text-gray-700 mx-auto mb-4" />
                         <p className="text-gray-500">No notifications yet</p>
@@ -493,9 +594,10 @@ function NotificationsTab({ restaurantId }: { restaurantId?: string }) {
                             </div>
                         ))}
                     </div>
-                )
-            ) : (
-                <div className="space-y-4">
+                )}
+            </div>
+        ) : (
+            <div className="space-y-4">
                     <div className="flex items-center gap-2 mb-4">
                         <label className="text-xs font-bold text-gray-500 uppercase">Select Date:</label>
                         <input
