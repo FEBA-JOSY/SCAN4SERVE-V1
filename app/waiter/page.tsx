@@ -23,6 +23,20 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
     const [activeTab, setActiveTab] = useState<WaiterTab>(initialTab)
     const [mqttClient, setMqttClient] = useState<mqtt.MqttClient | null>(null)
     const [waiterCalls, setWaiterCalls] = useState<any[]>([])
+
+    const playNotification = (type: 'call' | 'ready') => {
+        try {
+            const soundUrl = type === 'call' 
+                ? 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3' // Urgent bell
+                : 'https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3'; // Pleasant chime
+            const audio = new Audio(soundUrl);
+            audio.volume = 0.6;
+            audio.play();
+        } catch (error) {
+            console.warn("Audio playback failed:", error);
+        }
+    };
+
     const router = useRouter()
     const pathname = usePathname()
 
@@ -67,6 +81,9 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
                         if (prev.some(c => c.tableNumber === data.table)) return prev;
                         return [newCall, ...prev];
                     });
+                    
+                    playNotification('call');
+
                     toast.info(`Table ${data.table} is calling for a waiter!`, {
                         icon: <Bell className="w-4 h-4 text-orange-500" />
                     });
@@ -74,6 +91,9 @@ export default function WaiterDashboard({ initialTab = 'tables' }: { initialTab?
 
                 if (data.type === "STATUS") {
                     console.log(`Table Status Update: ${data.tableId} -> ${data.status}`);
+                    if (data.status === "READY" || data.status === "ready") {
+                        playNotification('ready');
+                    }
                     fetchTables(profile?.restaurantId);
                 }
                 if (data.type === "ORDER") {
